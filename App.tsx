@@ -216,6 +216,10 @@ const App: React.FC = () => {
       // If was playing, we might want to resume, but for editor usually pause on scrub is better
   };
 
+  const handleJumpToStart = () => {
+      handleSeek(0);
+  };
+
   const handleUpdateSegment = (id: string, updates: Partial<ClipSegment>) => {
       setTracks(prev => prev.map(t => ({
           ...t,
@@ -338,6 +342,7 @@ const App: React.FC = () => {
         <Header 
             playbackState={playbackState} 
             onTogglePlay={togglePlay} 
+            onJumpToStart={handleJumpToStart}
             onExport={handleExport}
             onAutoSync={handleAutoSync}
             canSync={clips.some(c => c.type === 'video') && beatGrid.beats.length > 0}

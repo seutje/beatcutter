@@ -1,10 +1,11 @@
 import React from 'react';
-import { Play, Pause, Download, Wand2 } from 'lucide-react';
+import { Play, Pause, Download, Wand2, SkipBack } from 'lucide-react';
 import { PlaybackState } from '../types';
 
 interface HeaderProps {
     playbackState: PlaybackState;
     onTogglePlay: () => void;
+    onJumpToStart: () => void;
     onExport: () => void;
     onAutoSync: () => void;
     canSync: boolean;
@@ -14,6 +15,7 @@ interface HeaderProps {
 const Header: React.FC<HeaderProps> = ({ 
     playbackState, 
     onTogglePlay, 
+    onJumpToStart,
     onExport, 
     onAutoSync,
     canSync,
@@ -44,12 +46,24 @@ const Header: React.FC<HeaderProps> = ({
 
                 <div className="h-8 w-px bg-gray-700 mx-2"></div>
 
-                <button 
-                    onClick={onTogglePlay}
-                    className="p-3 bg-gray-800 hover:bg-gray-700 rounded-full text-white transition-colors"
-                >
-                    {playbackState.isPlaying ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" />}
-                </button>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={onJumpToStart}
+                        className="p-3 bg-gray-800 hover:bg-gray-700 rounded-full text-white transition-colors"
+                        aria-label="Back to start"
+                        title="Back to start"
+                    >
+                        <SkipBack size={18} />
+                    </button>
+                    <button 
+                        onClick={onTogglePlay}
+                        className="p-3 bg-gray-800 hover:bg-gray-700 rounded-full text-white transition-colors"
+                        aria-label={playbackState.isPlaying ? 'Pause' : 'Play'}
+                        title={playbackState.isPlaying ? 'Pause' : 'Play'}
+                    >
+                        {playbackState.isPlaying ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" />}
+                    </button>
+                </div>
 
                 <div className="text-mono text-gray-300 w-24 text-center">
                     {(playbackState.currentTime / 1000).toFixed(2)}s
