@@ -38,6 +38,7 @@ const App: React.FC = () => {
   // --- Refs for Audio Engine ---
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioSourceNodeRef = useRef<AudioBufferSourceNode | null>(null);
+  const scrubPreviewSourceRef = useRef<AudioBufferSourceNode | null>(null);
   const masterAudioBufferRef = useRef<AudioBuffer | null>(null);
   const startTimeRef = useRef<number>(0);
   const animationFrameRef = useRef<number>(0);
@@ -303,6 +304,10 @@ const App: React.FC = () => {
 
     const ctx = audioContextRef.current!;
     if (ctx.state === 'suspended') ctx.resume();
+    if (scrubPreviewSourceRef.current) {
+        try { scrubPreviewSourceRef.current.stop(); } catch(e){}
+        scrubPreviewSourceRef.current = null;
+    }
 
     // Start audio if we have a master track
     if (masterAudioBufferRef.current) {
@@ -357,10 +362,42 @@ const App: React.FC = () => {
     setPlaybackState(prev => ({ ...prev, isPlaying: false }));
   };
 
+  const playScrubPreview = (timeMs: number) => {
+      if (!masterAudioBufferRef.current) return;
+
+      if (!audioContextRef.current) {
+          audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+
+      const ctx = audioContextRef.current!;
+      if (ctx.state === 'suspended') ctx.resume();
+
+      if (scrubPreviewSourceRef.current) {
+          try { scrubPreviewSourceRef.current.stop(); } catch(e){}
+      }
+
+      const source = ctx.createBufferSource();
+      source.buffer = masterAudioBufferRef.current;
+      source.connect(ctx.destination);
+
+      const frameSec = 1 / DEFAULT_FPS;
+      const maxOffset = Math.max(0, source.buffer.duration - frameSec);
+      const offsetSec = Math.min(Math.max(0, timeMs / 1000), maxOffset);
+      source.start(0, offsetSec, frameSec);
+
+      scrubPreviewSourceRef.current = source;
+      source.onended = () => {
+          if (scrubPreviewSourceRef.current === source) {
+              scrubPreviewSourceRef.current = null;
+          }
+      };
+  };
+
   const handleSeek = (timeMs: number) => {
       const wasPlaying = playbackState.isPlaying;
       if (wasPlaying) pause();
       setPlaybackState(prev => ({ ...prev, currentTime: timeMs }));
+      playScrubPreview(timeMs);
       // If was playing, we might want to resume, but for editor usually pause on scrub is better
   };
 
