@@ -139,7 +139,7 @@ const PreviewPlayer: React.FC<PreviewPlayerProps> = ({ playbackState, videoTrack
 
 
     return (
-        <div className="w-full h-full bg-black flex items-center justify-center relative overflow-hidden">
+        <div className="w-full h-full bg-stone-950 flex items-center justify-center relative overflow-hidden">
             {/* The Output Canvas */}
             <canvas 
                 ref={canvasRef} 
@@ -165,7 +165,7 @@ const PreviewPlayer: React.FC<PreviewPlayerProps> = ({ playbackState, videoTrack
             />
 
             {!videoTrack && (
-                <div className="absolute inset-0 flex items-center justify-center text-gray-700 pointer-events-none z-20">
+                <div className="absolute inset-0 flex items-center justify-center text-stone-500 pointer-events-none z-20">
                     <span className="text-2xl font-bold">NO SIGNAL</span>
                 </div>
             )}

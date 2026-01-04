@@ -43,7 +43,7 @@ const Timeline: React.FC<TimelineProps> = ({
         return beatGrid.beats.map((beatTime, idx) => (
             <div 
                 key={idx}
-                className="absolute top-0 bottom-0 w-px bg-emerald-400/20 pointer-events-none"
+                className="absolute top-0 bottom-0 w-px bg-blue-500/25 pointer-events-none"
                 style={{ left: `${beatTime * zoom}px` }}
             />
         ));
@@ -60,17 +60,17 @@ const Timeline: React.FC<TimelineProps> = ({
     }, [waveform]);
 
     return (
-        <div className="flex-1 bg-gray-900 overflow-x-auto overflow-y-hidden relative select-none custom-scrollbar border-t border-gray-800 h-64 flex flex-col min-w-0">
+        <div className="flex-1 bg-stone-900 overflow-x-auto overflow-y-hidden relative select-none custom-scrollbar border-t border-stone-800 h-64 flex flex-col min-w-0">
             {/* Time Ruler */}
             <div 
-                className="h-8 bg-gray-800 border-b border-gray-700 sticky top-0 z-10 cursor-pointer"
+                className="h-8 bg-stone-800 border-b border-stone-700 sticky top-0 z-10 cursor-pointer"
                 style={{ width: `${Math.max(totalWidth, window.innerWidth)}px` }}
                 onClick={handleTimelineClick}
                 ref={containerRef}
             >
                 {/* Generate ticks every second */}
                 {Array.from({ length: Math.ceil(duration / 1000) }).map((_, sec) => (
-                     <div key={sec} className="absolute bottom-0 text-[10px] text-gray-500 pl-1 border-l border-gray-600 h-3" style={{ left: `${sec * zoom}px`}}>
+                     <div key={sec} className="absolute bottom-0 text-[10px] text-stone-500 pl-1 border-l border-stone-700 h-3" style={{ left: `${sec * zoom}px`}}>
                         {sec}s
                      </div>
                 ))}
@@ -83,11 +83,11 @@ const Timeline: React.FC<TimelineProps> = ({
                 {tracks.map((track) => (
                     <div 
                         key={track.id} 
-                        className="relative border-b border-gray-800 w-full hover:bg-gray-800/30 transition-colors"
+                        className="relative border-b border-stone-800 w-full hover:bg-stone-800/40 transition-colors"
                         style={{ height: `${TRACK_HEIGHT}px` }}
                     >
                         {/* Track Label */}
-                        <div className="absolute left-2 top-2 z-10 text-xs text-gray-500 font-bold uppercase pointer-events-none opacity-50 mix-blend-difference">
+                        <div className="absolute left-2 top-2 z-10 text-xs text-stone-500 font-bold uppercase pointer-events-none opacity-50 mix-blend-difference">
                             {track.type}
                         </div>
 
@@ -100,8 +100,8 @@ const Timeline: React.FC<TimelineProps> = ({
                                 >
                                     <path
                                         d={waveformPath}
-                                        fill="rgba(16,185,129,0.25)"
-                                        stroke="rgba(16,185,129,0.7)"
+                                        fill="rgba(37,99,235,0.2)"
+                                        stroke="rgba(37,99,235,0.6)"
                                         strokeWidth="0.02"
                                     />
                                 </svg>
@@ -112,7 +112,7 @@ const Timeline: React.FC<TimelineProps> = ({
                             beatGrid.beats.map((beatTime, idx) => (
                                 <div
                                     key={idx}
-                                    className="absolute top-1 bottom-1 w-px bg-emerald-300/70 pointer-events-none shadow-[0_0_6px_rgba(16,185,129,0.6)]"
+                                    className="absolute top-1 bottom-1 w-px bg-blue-300/70 pointer-events-none shadow-[0_0_6px_rgba(37,99,235,0.6)]"
                                     style={{ left: `${beatTime * zoom}px` }}
                                 />
                             ))}
@@ -122,13 +122,13 @@ const Timeline: React.FC<TimelineProps> = ({
                             const isSelected = selectedSegmentId === seg.id;
                             const isAudioTrack = track.type === 'audio';
                             const baseClass = isAudioTrack
-                                ? 'border-emerald-300/70'
+                                ? 'border-blue-300/70'
                                 : isSelected
-                                    ? 'bg-indigo-500 border-indigo-300 shadow-lg shadow-indigo-500/20 z-20'
-                                    : 'bg-indigo-900/60 border-indigo-700 hover:bg-indigo-800/80 hover:border-indigo-500 z-10';
+                                    ? 'bg-amber-500 border-amber-300 shadow-lg shadow-amber-500/20 z-20'
+                                    : 'bg-amber-900/50 border-amber-700 hover:bg-amber-800/70 hover:border-amber-500 z-10';
                             const audioClass = isSelected
-                                ? 'bg-emerald-400/20 shadow-[0_0_10px_rgba(16,185,129,0.35)]'
-                                : 'bg-emerald-400/10 hover:bg-emerald-400/15 z-10';
+                                ? 'bg-blue-500/20 shadow-[0_0_10px_rgba(37,99,235,0.35)]'
+                                : 'bg-blue-500/10 hover:bg-blue-500/15 z-10';
                             return (
                             <div
                                 key={seg.id}
@@ -142,7 +142,7 @@ const Timeline: React.FC<TimelineProps> = ({
                                 }}
                             >
                                 {!isAudioTrack && (
-                                    <div className="p-1 text-[10px] text-indigo-100 truncate opacity-75">
+                                    <div className="p-1 text-[10px] text-amber-100 truncate opacity-75">
                                         {(seg.duration / 1000).toFixed(2)}s
                                     </div>
                                 )}

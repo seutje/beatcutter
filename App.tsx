@@ -491,7 +491,7 @@ const App: React.FC = () => {
 
   // --- Render ---
   return (
-    <div className="flex flex-col h-screen bg-gray-950 text-white font-sans overflow-hidden">
+    <div className="flex flex-col h-screen bg-stone-950 text-stone-100 font-sans overflow-hidden">
         <Header 
             playbackState={playbackState} 
             onTogglePlay={togglePlay} 
@@ -508,9 +508,9 @@ const App: React.FC = () => {
             <MediaPool clips={clips} onImport={handleImport} onDelete={handleDeleteClip} />
 
             {/* Center: Preview Stage */}
-            <div className="flex-1 flex flex-col bg-black relative min-w-0">
+            <div className="flex-1 flex flex-col bg-stone-950 relative min-w-0">
                 <div className="flex-1 p-4 flex items-center justify-center">
-                    <div className="aspect-video w-full max-w-4xl bg-gray-900 shadow-2xl rounded-lg overflow-hidden border border-gray-800">
+                    <div className="aspect-video w-full max-w-4xl bg-stone-900 shadow-2xl rounded-lg overflow-hidden border border-stone-800">
                         <PreviewPlayer 
                             playbackState={playbackState} 
                             videoTrack={tracks.find(t => t.type === 'video')}
@@ -553,16 +553,16 @@ const App: React.FC = () => {
             <div
               role="dialog"
               aria-modal="true"
-              className="w-[420px] max-w-[90vw] rounded-lg border border-gray-800 bg-gray-900 shadow-xl"
+              className="w-[420px] max-w-[90vw] rounded-lg border border-stone-800 bg-stone-900 shadow-xl"
             >
-              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-stone-800">
                 <div>
-                  <h2 className="text-lg font-semibold text-white">Auto-Sync Settings</h2>
-                  <p className="text-xs text-gray-500 mt-1">Fine-tune timing before generating cuts.</p>
+                  <h2 className="text-lg font-semibold text-stone-100">Auto-Sync Settings</h2>
+                  <p className="text-xs text-stone-400 mt-1">Fine-tune timing before generating cuts.</p>
                 </div>
                 <button
                   onClick={closeAutoSyncDialog}
-                  className="text-gray-500 hover:text-gray-300 text-xl leading-none"
+                  className="text-stone-400 hover:text-stone-200 text-xl leading-none"
                   aria-label="Close auto-sync dialog"
                 >
                   x
@@ -571,7 +571,7 @@ const App: React.FC = () => {
 
               <div className="px-5 py-4 space-y-4">
                 <div className="grid grid-cols-2 gap-3">
-                  <label className="text-xs text-gray-400 uppercase tracking-wide">
+                  <label className="text-xs text-stone-400 uppercase tracking-wide">
                     BPM
                     <input
                       type="number"
@@ -580,10 +580,10 @@ const App: React.FC = () => {
                       step={1}
                       value={autoSyncBpm}
                       onChange={(e) => setAutoSyncBpm(Number(e.target.value))}
-                      className="mt-2 w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-gray-200"
+                      className="mt-2 w-full bg-stone-800 border border-stone-700 rounded px-2 py-1 text-sm text-stone-200"
                     />
                   </label>
-                  <label className="text-xs text-gray-400 uppercase tracking-wide">
+                  <label className="text-xs text-stone-400 uppercase tracking-wide">
                     Clip Length (bars)
                     <input
                       type="number"
@@ -592,18 +592,18 @@ const App: React.FC = () => {
                       step={1}
                       value={autoSyncBars}
                       onChange={(e) => setAutoSyncBars(Number(e.target.value))}
-                      className="mt-2 w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-gray-200"
+                      className="mt-2 w-full bg-stone-800 border border-stone-700 rounded px-2 py-1 text-sm text-stone-200"
                     />
                   </label>
                 </div>
 
-                <label className="text-xs text-gray-400 uppercase tracking-wide">
+                <label className="text-xs text-stone-400 uppercase tracking-wide">
                   Intro Skip (frames)
                   <input
                     type="number"
                     value={autoSyncIntroSkipFrames}
                     onChange={(e) => setAutoSyncIntroSkipFrames(Number(e.target.value))}
-                    className="mt-2 w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-gray-200"
+                    className="mt-2 w-full bg-stone-800 border border-stone-700 rounded px-2 py-1 text-sm text-stone-200"
                   />
                 </label>
 
@@ -614,8 +614,8 @@ const App: React.FC = () => {
                     disabled={autoSyncAnalyzing}
                     className={`flex-1 rounded border px-3 py-2 text-sm font-medium transition-colors ${
                       autoSyncAnalyzing
-                        ? 'border-gray-700 text-gray-500 cursor-not-allowed'
-                        : 'border-indigo-500 text-indigo-300 hover:bg-indigo-500/10'
+                        ? 'border-stone-700 text-stone-500 cursor-not-allowed'
+                        : 'border-amber-400 text-amber-300 hover:bg-amber-400/10'
                     }`}
                   >
                     {autoSyncAnalyzing ? 'Analyzing with Gemini...' : 'Use Gemini 3 Flash'}
@@ -627,7 +627,7 @@ const App: React.FC = () => {
                       setAutoSyncIntroSkipFrames(introSkipFrames);
                       setAutoSyncBars(4);
                     }}
-                    className="px-3 py-2 text-sm text-gray-400 hover:text-gray-200"
+                    className="px-3 py-2 text-sm text-stone-400 hover:text-stone-200"
                   >
                     Reset
                   </button>
@@ -640,18 +640,18 @@ const App: React.FC = () => {
                 )}
               </div>
 
-              <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-gray-800">
+              <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-stone-800">
                 <button
                   type="button"
                   onClick={closeAutoSyncDialog}
-                  className="px-3 py-2 text-sm text-gray-400 hover:text-gray-200"
+                  className="px-3 py-2 text-sm text-stone-400 hover:text-stone-200"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
                   onClick={applyAutoSyncSettings}
-                  className="px-4 py-2 text-sm font-semibold rounded bg-indigo-600 hover:bg-indigo-500 text-white"
+                  className="px-4 py-2 text-sm font-semibold rounded bg-amber-500 hover:bg-amber-400 text-stone-950"
                 >
                   Auto-Sync Clips
                 </button>
