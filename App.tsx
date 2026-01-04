@@ -247,8 +247,7 @@ const App: React.FC = () => {
       const clampedBars = Math.min(8, Math.max(1, Math.round(Number(autoSyncBars))));
       const nextIntroSkipFrames = Math.round(Number(autoSyncIntroSkipFrames));
 
-      const currentIntroSkipSec = introSkipFrames / DEFAULT_FPS;
-      const baseOffset = beatGrid.offset - currentIntroSkipSec;
+      const baseOffset = 0;
       const nextIntroSkipSec = nextIntroSkipFrames / DEFAULT_FPS;
       const rebuilt = buildBeatGrid(clampedBpm, baseOffset, duration / 1000);
       const shiftedBeats = rebuilt.beats.map(beat => Math.max(0, beat + nextIntroSkipSec));
