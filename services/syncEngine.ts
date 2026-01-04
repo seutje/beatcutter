@@ -5,10 +5,12 @@ import { v4 as uuidv4 } from 'uuid';
 export const autoSyncClips = (
     clips: SourceClip[], 
     beatGrid: BeatGrid, 
-    totalDuration: number
+    totalDuration: number,
+    preferredBars: number = 4
 ): ClipSegment[] => {
     const beatsPerBar = BEATS_PER_BAR;
-    const allowedBarLengths = [4, 2, 1]
+    const sanitizedBars = Number.isFinite(preferredBars) ? Math.max(1, Math.round(preferredBars)) : 4;
+    const allowedBarLengths = Array.from(new Set([sanitizedBars, 4, 2, 1]))
         .map((bars) => bars * beatsPerBar)
         .sort((a, b) => b - a);
     const segments: ClipSegment[] = [];
@@ -31,13 +33,11 @@ export const autoSyncClips = (
         const startTime = beats[beatIndex] * 1000; // Convert to ms
 
         const clip = orderedClips[segmentIndex % orderedClips.length];
-        const maxEndTime = startTime + clip.duration;
-
-        // Clip to 1, 2, or 4 bars (no 3-bar segments).
+        // Clip to preferred, 4, 2, or 1 bars (no 3-bar segments).
         let chosenEndBeatIndex = -1;
         for (const beatLength of allowedBarLengths) {
             const candidateIndex = beatIndex + beatLength;
-            if (candidateIndex < beats.length && beats[candidateIndex] * 1000 <= maxEndTime) {
+            if (candidateIndex < beats.length) {
                 chosenEndBeatIndex = candidateIndex;
                 break;
             }

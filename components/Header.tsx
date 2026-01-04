@@ -9,6 +9,7 @@ interface HeaderProps {
     onExport: () => void;
     onAutoSync: () => void;
     canSync: boolean;
+    canOpenAutoSync: boolean;
     projectName: string;
 }
 
@@ -19,6 +20,7 @@ const Header: React.FC<HeaderProps> = ({
     onExport, 
     onAutoSync,
     canSync,
+    canOpenAutoSync,
     projectName 
 }) => {
     return (
@@ -33,9 +35,9 @@ const Header: React.FC<HeaderProps> = ({
             <div className="flex items-center gap-4">
                  <button 
                     onClick={onAutoSync}
-                    disabled={!canSync}
+                    disabled={!canOpenAutoSync}
                     className={`flex items-center gap-2 px-4 py-2 rounded font-medium transition-colors ${
-                        canSync 
+                        canOpenAutoSync 
                         ? 'bg-indigo-600 hover:bg-indigo-500 text-white' 
                         : 'bg-gray-800 text-gray-500 cursor-not-allowed'
                     }`}
