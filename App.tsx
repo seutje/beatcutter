@@ -192,6 +192,7 @@ const App: React.FC = () => {
               `Shortest clip length is ${shortestClipSec.toFixed(2)}s.`,
               'Choose clip_length_bars so that the clip length in seconds (bars * 60 * 4 / bpm) does not exceed the shortest clip length.',
               'intro_skip_frames means the number of frames to skip before the first beat so the first clip starts at that frame and all cuts line up with the beats and especially with the drop.',
+              'intro_skip_frames should never be more than 4 bars.',
               'If unsure, provide best estimates. Return JSON only.'
           ].join(' ');
 
