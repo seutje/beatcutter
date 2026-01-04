@@ -57,15 +57,8 @@ export const autoSyncClips = (
             continue;
         }
 
-        // Determine a valid source offset
-        // We want a random chunk of the video that fits the duration
-        const maxOffset = clip.duration - duration;
-        
-        // If clip is too short, we loop it or just take what we can (clamping)
-        let sourceStartOffset = 0;
-        if (maxOffset > 0) {
-            sourceStartOffset = Math.random() * maxOffset;
-        }
+        // Default clip offset to 0 so segments start at the beginning.
+        const sourceStartOffset = 0;
 
         segments.push({
             id: uuidv4(),
