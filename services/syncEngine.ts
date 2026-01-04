@@ -7,8 +7,12 @@ export const autoSyncClips = (
     totalDuration: number
 ): ClipSegment[] => {
     const segments: ClipSegment[] = [];
+    const orderedClips = [...clips].sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
+    );
+    let segmentIndex = 0;
     
-    if (clips.length === 0 || beatGrid.beats.length === 0) return [];
+    if (orderedClips.length === 0 || beatGrid.beats.length === 0) return [];
 
     const beats = beatGrid.beats;
     // Ensure we cover the start if the first beat is offset
@@ -25,8 +29,7 @@ export const autoSyncClips = (
         // Skip really short glitches
         if (duration < 100) continue;
 
-        // Pick a random clip
-        const clip = clips[Math.floor(Math.random() * clips.length)];
+        const clip = orderedClips[segmentIndex % orderedClips.length];
 
         // Determine a valid source offset
         // We want a random chunk of the video that fits the duration
@@ -45,6 +48,7 @@ export const autoSyncClips = (
             duration: duration,
             sourceStartOffset: sourceStartOffset
         });
+        segmentIndex += 1;
 
         // Stop if we exceed total duration of audio
         if (startTime > totalDuration) break;
