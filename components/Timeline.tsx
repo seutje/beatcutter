@@ -32,7 +32,7 @@ const Timeline: React.FC<TimelineProps> = ({
 
     const handleTimelineClick = (e: React.MouseEvent) => {
         if (!scrollContainerRef.current) return;
-        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        const rect = scrollContainerRef.current.getBoundingClientRect();
         const offsetX = e.clientX - rect.left + scrollContainerRef.current.scrollLeft;
         const timeMs = (offsetX / zoom) * 1000;
         onSeek(Math.max(0, timeMs));
