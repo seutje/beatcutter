@@ -6,6 +6,10 @@ export const autoSyncClips = (
     beatGrid: BeatGrid, 
     totalDuration: number
 ): ClipSegment[] => {
+    const beatsPerBar = 4;
+    const allowedBarLengths = [4, 2, 1]
+        .map((bars) => bars * beatsPerBar)
+        .sort((a, b) => b - a);
     const segments: ClipSegment[] = [];
     const orderedClips = [...clips].sort((a, b) =>
         a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
@@ -28,18 +32,20 @@ export const autoSyncClips = (
         const clip = orderedClips[segmentIndex % orderedClips.length];
         const maxEndTime = startTime + clip.duration;
 
-        // Find the last beat that fits within the clip length.
-        let endBeatIndex = beatIndex + 1;
-        while (endBeatIndex < beats.length && beats[endBeatIndex] * 1000 <= maxEndTime) {
-            endBeatIndex += 1;
+        // Clip to 1, 2, or 4 bars (no 3-bar segments).
+        let chosenEndBeatIndex = -1;
+        for (const beatLength of allowedBarLengths) {
+            const candidateIndex = beatIndex + beatLength;
+            if (candidateIndex < beats.length && beats[candidateIndex] * 1000 <= maxEndTime) {
+                chosenEndBeatIndex = candidateIndex;
+                break;
+            }
         }
-
-        let chosenEndBeatIndex = endBeatIndex - 1;
-        if (chosenEndBeatIndex <= beatIndex) {
-            // If the clip is shorter than a single beat interval, fall back to the next beat.
-            chosenEndBeatIndex = beatIndex + 1;
+        if (chosenEndBeatIndex < 0) {
+            const fallbackIndex = beatIndex + beatsPerBar;
+            if (fallbackIndex >= beats.length) break;
+            chosenEndBeatIndex = fallbackIndex;
         }
-        if (chosenEndBeatIndex >= beats.length) break;
 
         const endTime = beats[chosenEndBeatIndex] * 1000;
         const duration = endTime - startTime;
