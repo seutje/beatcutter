@@ -1,4 +1,4 @@
-import React, { useRef, useMemo } from 'react';
+import React, { useRef, useMemo, useEffect } from 'react';
 import { TimelineTrack, PlaybackState, BeatGrid } from '../types';
 import { TRACK_HEIGHT, DEFAULT_ZOOM } from '../constants';
 
@@ -25,18 +25,34 @@ const Timeline: React.FC<TimelineProps> = ({
     onSelectSegment,
     selectedSegmentId
 }) => {
-    const containerRef = useRef<HTMLDivElement>(null);
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
 
     // Calculate width based on total duration
     const totalWidth = (duration / 1000) * zoom;
 
     const handleTimelineClick = (e: React.MouseEvent) => {
-        if (!containerRef.current) return;
-        const rect = containerRef.current.getBoundingClientRect();
-        const offsetX = e.clientX - rect.left + containerRef.current.scrollLeft;
+        if (!scrollContainerRef.current) return;
+        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        const offsetX = e.clientX - rect.left + scrollContainerRef.current.scrollLeft;
         const timeMs = (offsetX / zoom) * 1000;
         onSeek(Math.max(0, timeMs));
     };
+
+    useEffect(() => {
+        if (!playbackState.isPlaying) return;
+        const container = scrollContainerRef.current;
+        if (!container) return;
+        const viewLeft = container.scrollLeft;
+        const viewRight = viewLeft + container.clientWidth;
+        const playheadX = (playbackState.currentTime / 1000) * zoom;
+
+        if (playheadX > viewRight || playheadX < viewLeft) {
+            const direction = playheadX > viewRight ? 1 : -1;
+            const nextLeft = viewLeft + direction * container.clientWidth;
+            const maxLeft = container.scrollWidth - container.clientWidth;
+            container.scrollLeft = Math.max(0, Math.min(maxLeft, nextLeft));
+        }
+    }, [playbackState.currentTime, playbackState.isPlaying, zoom]);
 
     // Render Beats Grid
     const beatsRender = useMemo(() => {
@@ -60,13 +76,15 @@ const Timeline: React.FC<TimelineProps> = ({
     }, [waveform]);
 
     return (
-        <div className="flex-1 bg-stone-900 overflow-x-auto overflow-y-hidden relative select-none custom-scrollbar border-t border-stone-800 h-64 flex flex-col min-w-0">
+        <div
+            ref={scrollContainerRef}
+            className="flex-1 bg-stone-900 overflow-x-auto overflow-y-hidden relative select-none custom-scrollbar border-t border-stone-800 h-64 flex flex-col min-w-0"
+        >
             {/* Time Ruler */}
             <div 
                 className="h-8 bg-stone-800 border-b border-stone-700 sticky top-0 z-10 cursor-pointer"
                 style={{ width: `${Math.max(totalWidth, window.innerWidth)}px` }}
                 onClick={handleTimelineClick}
-                ref={containerRef}
             >
                 {/* Generate ticks every second */}
                 {Array.from({ length: Math.ceil(duration / 1000) }).map((_, sec) => (
