@@ -2,6 +2,7 @@ export const TIMELINE_ZOOM_MIN = 10; // pixels per second
 export const TIMELINE_ZOOM_MAX = 500;
 export const DEFAULT_ZOOM = 50; // pixels per second
 export const DEFAULT_FPS = 30;
+export const BEATS_PER_BAR = 4;
 
 export const TRACK_HEIGHT = 80;
 export const HEADER_HEIGHT = 64;

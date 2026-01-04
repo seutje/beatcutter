@@ -8,6 +8,10 @@ interface InspectorProps {
     onUpdateSegment: (id: string, updates: Partial<ClipSegment>) => void;
     introSkipFrames: number;
     onUpdateIntroSkipFrames: (frames: number) => void;
+    bpm: number;
+    barLengthSec: number;
+    onUpdateBpm: (bpm: number) => void;
+    onUpdateBarLength: (barLengthSec: number) => void;
 }
 
 const Inspector: React.FC<InspectorProps> = ({
@@ -16,7 +20,11 @@ const Inspector: React.FC<InspectorProps> = ({
     clips,
     onUpdateSegment,
     introSkipFrames,
-    onUpdateIntroSkipFrames
+    onUpdateIntroSkipFrames,
+    bpm,
+    barLengthSec,
+    onUpdateBpm,
+    onUpdateBarLength
 }) => {
     const segment = tracks.flatMap(track => track.segments).find(s => s.id === selectedSegmentId);
     const sourceClip = segment ? clips.find(c => c.id === segment.sourceClipId) : null;
@@ -60,6 +68,40 @@ const Inspector: React.FC<InspectorProps> = ({
                          </div>
                     </div>
                 </div>
+
+                {sourceClip.type === 'audio' && (
+                    <div>
+                        <label className="block text-xs text-gray-500 mb-2 uppercase">Tempo</label>
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <span className="text-xs text-gray-400 block mb-1">BPM</span>
+                                <input
+                                    type="number"
+                                    min={30}
+                                    max={300}
+                                    step={0.1}
+                                    value={Number.isFinite(bpm) ? Number(bpm.toFixed(1)) : 120}
+                                    onChange={(e) => onUpdateBpm(Number(e.target.value))}
+                                    className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-gray-300"
+                                />
+                            </div>
+                            <div>
+                                <span className="text-xs text-gray-400 block mb-1">Bar (s)</span>
+                                <input
+                                    type="number"
+                                    min={0.1}
+                                    step={0.01}
+                                    value={Number.isFinite(barLengthSec) ? Number(barLengthSec.toFixed(2)) : 2}
+                                    onChange={(e) => onUpdateBarLength(Number(e.target.value))}
+                                    className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-gray-300"
+                                />
+                            </div>
+                        </div>
+                        <p className="text-xs text-gray-600 mt-2 leading-relaxed">
+                            Editing either value recalculates the beat grid so clips stay in sync.
+                        </p>
+                    </div>
+                )}
 
                 {sourceClip.type === 'audio' && (
                     <div>

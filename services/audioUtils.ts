@@ -76,35 +76,41 @@ export const analyzeBeats = (buffer: AudioBuffer): BeatGrid => {
   if (bpm > 180) bpm /= 2;
 
   // Generate a clean grid based on the estimated BPM
-  const cleanBeats: number[] = [];
-  const spb = 60 / bpm;
-  
   // Find the first detected beat to use as an anchor
   const anchorBeat = beatTimes.length > 0 ? beatTimes[0] : 0;
-  
+  const { beats: uniqueBeats } = buildBeatGrid(bpm, anchorBeat, buffer.duration);
+
+  return {
+    bpm,
+    offset: anchorBeat,
+    beats: uniqueBeats,
+  };
+};
+
+export const buildBeatGrid = (bpm: number, offset: number, durationSec: number): BeatGrid => {
+  const cleanBeats: number[] = [];
+  const spb = 60 / bpm;
+
   // Backfill beats to 0 (or slightly before)
-  let t = anchorBeat;
+  let t = offset;
   while (t > 0) {
-      t -= spb;
-  }
-  // Ensure we don't start with a negative timestamp that is too far back, 
-  // but starting slightly negative is fine to cover 0.0s
-  
-  // Forward fill
-  while (t < buffer.duration) {
-      if (t >= -0.1) { // Include 0
-          cleanBeats.push(Math.max(0, t)); 
-      }
-      t += spb;
+    t -= spb;
   }
 
-  // Dedup if Math.max caused duplicates at 0
+  // Forward fill
+  while (t < durationSec) {
+    if (t >= -0.1) {
+      cleanBeats.push(Math.max(0, t));
+    }
+    t += spb;
+  }
+
   const uniqueBeats = [...new Set(cleanBeats)];
   uniqueBeats.sort((a, b) => a - b);
 
   return {
     bpm,
-    offset: anchorBeat,
+    offset,
     beats: uniqueBeats,
   };
 };

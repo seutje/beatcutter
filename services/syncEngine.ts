@@ -1,4 +1,5 @@
 import { BeatGrid, ClipSegment, SourceClip } from '../types';
+import { BEATS_PER_BAR } from '../constants';
 import { v4 as uuidv4 } from 'uuid';
 
 export const autoSyncClips = (
@@ -6,7 +7,7 @@ export const autoSyncClips = (
     beatGrid: BeatGrid, 
     totalDuration: number
 ): ClipSegment[] => {
-    const beatsPerBar = 4;
+    const beatsPerBar = BEATS_PER_BAR;
     const allowedBarLengths = [4, 2, 1]
         .map((bars) => bars * beatsPerBar)
         .sort((a, b) => b - a);

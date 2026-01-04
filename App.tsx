@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { Project, SourceClip, TimelineTrack, BeatGrid, PlaybackState, ClipSegment } from './types';
-import { decodeAudio, analyzeBeats, generateWaveform } from './services/audioUtils';
+import { decodeAudio, analyzeBeats, buildBeatGrid, generateWaveform } from './services/audioUtils';
 import { autoSyncClips } from './services/syncEngine';
-import { DEFAULT_ZOOM, DEFAULT_FPS } from './constants';
+import { DEFAULT_ZOOM, DEFAULT_FPS, BEATS_PER_BAR } from './constants';
 import Header from './components/Header';
 import MediaPool from './components/MediaPool';
 import Timeline from './components/Timeline';
@@ -245,6 +245,29 @@ const App: React.FC = () => {
       setIntroSkipFrames(clampedFrames);
   };
 
+  const handleUpdateBpm = useCallback((nextBpm: number) => {
+      if (!Number.isFinite(nextBpm)) return;
+      const clampedBpm = Math.min(300, Math.max(30, nextBpm));
+      const introSkipSec = introSkipFrames / DEFAULT_FPS;
+      setBeatGrid(prev => {
+          const baseOffset = prev.offset - introSkipSec;
+          const rebuilt = buildBeatGrid(clampedBpm, baseOffset, duration / 1000);
+          const shiftedBeats = rebuilt.beats
+              .map(beat => Math.max(0, beat + introSkipSec));
+          return {
+              ...rebuilt,
+              offset: rebuilt.offset + introSkipSec,
+              beats: [...new Set(shiftedBeats)].sort((a, b) => a - b),
+          };
+      });
+  }, [duration, introSkipFrames]);
+
+  const handleUpdateBarLength = useCallback((barLengthSec: number) => {
+      if (!Number.isFinite(barLengthSec) || barLengthSec <= 0) return;
+      const nextBpm = (60 * BEATS_PER_BAR) / barLengthSec;
+      handleUpdateBpm(nextBpm);
+  }, [handleUpdateBpm]);
+
   // --- Export Logic (FFmpeg command generation) ---
   const handleExport = () => {
       // Construct the complex filter command
@@ -359,6 +382,10 @@ const App: React.FC = () => {
                 onUpdateSegment={handleUpdateSegment}
                 introSkipFrames={introSkipFrames}
                 onUpdateIntroSkipFrames={handleUpdateIntroSkipFrames}
+                bpm={beatGrid.bpm}
+                barLengthSec={(60 / beatGrid.bpm) * BEATS_PER_BAR}
+                onUpdateBpm={handleUpdateBpm}
+                onUpdateBarLength={handleUpdateBarLength}
             />
         </div>
     </div>
