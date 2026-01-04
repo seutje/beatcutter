@@ -26,6 +26,7 @@ const Timeline: React.FC<TimelineProps> = ({
     selectedSegmentId
 }) => {
     const scrollContainerRef = useRef<HTMLDivElement>(null);
+    const isScrubbingRef = useRef(false);
 
     // Calculate width based on total duration
     const totalWidth = (duration / 1000) * zoom;
@@ -35,8 +36,40 @@ const Timeline: React.FC<TimelineProps> = ({
         const rect = scrollContainerRef.current.getBoundingClientRect();
         const offsetX = e.clientX - rect.left + scrollContainerRef.current.scrollLeft;
         const timeMs = (offsetX / zoom) * 1000;
-        onSeek(Math.max(0, timeMs));
+        onSeek(Math.max(0, Math.min(duration, timeMs)));
     };
+
+    const updateTimeFromClientX = (clientX: number) => {
+        if (!scrollContainerRef.current) return;
+        const rect = scrollContainerRef.current.getBoundingClientRect();
+        const offsetX = clientX - rect.left + scrollContainerRef.current.scrollLeft;
+        const timeMs = (offsetX / zoom) * 1000;
+        onSeek(Math.max(0, Math.min(duration, timeMs)));
+    };
+
+    const handleScrubStart = (e: React.MouseEvent) => {
+        if (e.button !== 0) return;
+        isScrubbingRef.current = true;
+        updateTimeFromClientX(e.clientX);
+        e.preventDefault();
+    };
+
+    useEffect(() => {
+        const handleMouseMove = (e: MouseEvent) => {
+            if (!isScrubbingRef.current) return;
+            updateTimeFromClientX(e.clientX);
+        };
+        const handleMouseUp = () => {
+            if (!isScrubbingRef.current) return;
+            isScrubbingRef.current = false;
+        };
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, [zoom, duration, onSeek]);
 
     useEffect(() => {
         if (!playbackState.isPlaying) return;
@@ -85,6 +118,7 @@ const Timeline: React.FC<TimelineProps> = ({
                 className="h-8 bg-stone-800 border-b border-stone-700 sticky top-0 z-10 cursor-pointer"
                 style={{ width: `${Math.max(totalWidth, window.innerWidth)}px` }}
                 onClick={handleTimelineClick}
+                onMouseDown={handleScrubStart}
             >
                 {/* Generate ticks every second */}
                 {Array.from({ length: Math.ceil(duration / 1000) }).map((_, sec) => (
@@ -95,7 +129,12 @@ const Timeline: React.FC<TimelineProps> = ({
             </div>
 
             {/* Tracks Container */}
-            <div className="relative flex-1" style={{ width: `${Math.max(totalWidth, window.innerWidth)}px` }} onClick={handleTimelineClick}>
+            <div
+                className="relative flex-1"
+                style={{ width: `${Math.max(totalWidth, window.innerWidth)}px` }}
+                onClick={handleTimelineClick}
+                onMouseDown={handleScrubStart}
+            >
                 {beatsRender}
 
                 {tracks.map((track) => (
@@ -151,6 +190,7 @@ const Timeline: React.FC<TimelineProps> = ({
                             <div
                                 key={seg.id}
                                 onClick={(e) => { e.stopPropagation(); onSelectSegment(seg.id); }}
+                                onMouseDown={(e) => { e.stopPropagation(); }}
                                 className={`absolute top-2 bottom-2 rounded cursor-pointer overflow-hidden border transition-colors ${
                                     isAudioTrack ? `${baseClass} ${audioClass}` : baseClass
                                 }`}
