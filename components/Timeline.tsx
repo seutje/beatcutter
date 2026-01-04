@@ -6,6 +6,7 @@ interface TimelineProps {
     tracks: TimelineTrack[];
     playbackState: PlaybackState;
     beatGrid: BeatGrid;
+    waveform: number[];
     zoom: number;
     duration: number;
     onSeek: (time: number) => void;
@@ -17,6 +18,7 @@ const Timeline: React.FC<TimelineProps> = ({
     tracks,
     playbackState,
     beatGrid,
+    waveform,
     zoom,
     duration,
     onSeek,
@@ -41,11 +43,21 @@ const Timeline: React.FC<TimelineProps> = ({
         return beatGrid.beats.map((beatTime, idx) => (
             <div 
                 key={idx}
-                className="absolute top-0 bottom-0 w-px bg-gray-700/50 pointer-events-none"
+                className="absolute top-0 bottom-0 w-px bg-emerald-400/20 pointer-events-none"
                 style={{ left: `${beatTime * zoom}px` }}
             />
         ));
     }, [beatGrid, zoom]);
+
+    const waveformPath = useMemo(() => {
+        if (waveform.length < 2) return '';
+        const top = waveform.map((amp, idx) => `${idx} ${0.5 - amp * 0.48}`);
+        const bottom = waveform
+            .slice()
+            .reverse()
+            .map((amp, idx) => `${waveform.length - 1 - idx} ${0.5 + amp * 0.48}`);
+        return `M ${top[0]} L ${top.join(' L ')} L ${bottom.join(' L ')} Z`;
+    }, [waveform]);
 
     return (
         <div className="flex-1 bg-gray-900 overflow-x-auto overflow-y-hidden relative select-none custom-scrollbar border-t border-gray-800 h-64 flex flex-col min-w-0">
@@ -79,6 +91,32 @@ const Timeline: React.FC<TimelineProps> = ({
                             {track.type}
                         </div>
 
+                        {track.type === 'audio' && waveform.length > 1 && (
+                            <div className="absolute inset-0 z-0 pointer-events-none">
+                                <svg
+                                    className="w-full h-full"
+                                    viewBox={`0 0 ${waveform.length - 1} 1`}
+                                    preserveAspectRatio="none"
+                                >
+                                    <path
+                                        d={waveformPath}
+                                        fill="rgba(16,185,129,0.25)"
+                                        stroke="rgba(16,185,129,0.7)"
+                                        strokeWidth="0.02"
+                                    />
+                                </svg>
+                            </div>
+                        )}
+
+                        {track.type === 'audio' &&
+                            beatGrid.beats.map((beatTime, idx) => (
+                                <div
+                                    key={idx}
+                                    className="absolute top-1 bottom-1 w-px bg-emerald-300/70 pointer-events-none shadow-[0_0_6px_rgba(16,185,129,0.6)]"
+                                    style={{ left: `${beatTime * zoom}px` }}
+                                />
+                            ))}
+
                         {/* Segments */}
                         {track.segments.map((seg) => (
                             <div
@@ -86,8 +124,8 @@ const Timeline: React.FC<TimelineProps> = ({
                                 onClick={(e) => { e.stopPropagation(); onSelectSegment(seg.id); }}
                                 className={`absolute top-2 bottom-2 rounded cursor-pointer overflow-hidden border transition-colors ${
                                     selectedSegmentId === seg.id 
-                                    ? 'bg-indigo-500 border-indigo-300 shadow-lg shadow-indigo-500/20 z-10' 
-                                    : 'bg-indigo-900/60 border-indigo-700 hover:bg-indigo-800/80 hover:border-indigo-500'
+                                    ? 'bg-indigo-500 border-indigo-300 shadow-lg shadow-indigo-500/20 z-20' 
+                                    : 'bg-indigo-900/60 border-indigo-700 hover:bg-indigo-800/80 hover:border-indigo-500 z-10'
                                 }`}
                                 style={{
                                     left: `${(seg.timelineStart / 1000) * zoom}px`,

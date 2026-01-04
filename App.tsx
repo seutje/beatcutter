@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { Project, SourceClip, TimelineTrack, BeatGrid, PlaybackState, ClipSegment } from './types';
-import { decodeAudio, analyzeBeats } from './services/audioUtils';
+import { decodeAudio, analyzeBeats, generateWaveform } from './services/audioUtils';
 import { autoSyncClips } from './services/syncEngine';
 import { DEFAULT_ZOOM } from './constants';
 import Header from './components/Header';
@@ -18,6 +18,7 @@ const App: React.FC = () => {
     { id: 'audio-1', type: 'audio', segments: [] }
   ]);
   const [beatGrid, setBeatGrid] = useState<BeatGrid>({ bpm: 120, offset: 0, beats: [] });
+  const [waveform, setWaveform] = useState<number[]>([]);
   const [playbackState, setPlaybackState] = useState<PlaybackState>({
     isPlaying: false,
     currentTime: 0,
@@ -67,6 +68,8 @@ const App: React.FC = () => {
                  masterAudioBufferRef.current = buffer;
                  const analysis = analyzeBeats(buffer);
                  setBeatGrid(analysis);
+                 const waveformPoints = Math.min(4000, Math.max(600, Math.floor(buffer.duration * 60)));
+                 setWaveform(generateWaveform(buffer, waveformPoints));
                  setDuration(buffer.duration * 1000);
                  
                  // Add to audio track
@@ -314,6 +317,7 @@ const App: React.FC = () => {
                     tracks={tracks} 
                     playbackState={playbackState} 
                     beatGrid={beatGrid}
+                    waveform={waveform}
                     zoom={zoom}
                     duration={duration}
                     onSeek={handleSeek}
