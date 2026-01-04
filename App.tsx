@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { Project, SourceClip, TimelineTrack, BeatGrid, PlaybackState, ClipSegment } from './types';
 import { decodeAudio, analyzeBeats, generateWaveform } from './services/audioUtils';
 import { autoSyncClips } from './services/syncEngine';
-import { DEFAULT_ZOOM } from './constants';
+import { DEFAULT_ZOOM, DEFAULT_FPS } from './constants';
 import Header from './components/Header';
 import MediaPool from './components/MediaPool';
 import Timeline from './components/Timeline';
@@ -19,6 +19,7 @@ const App: React.FC = () => {
   ]);
   const [beatGrid, setBeatGrid] = useState<BeatGrid>({ bpm: 120, offset: 0, beats: [] });
   const [waveform, setWaveform] = useState<number[]>([]);
+  const [introSkipFrames, setIntroSkipFrames] = useState<number>(0);
   const [playbackState, setPlaybackState] = useState<PlaybackState>({
     isPlaying: false,
     currentTime: 0,
@@ -44,6 +45,7 @@ const App: React.FC = () => {
     
     for (let i = 0; i < files.length; i++) {
         const file = files[i];
+        const clipId = uuidv4();
         const isAudio = file.type.startsWith('audio');
         
         // Create Object URL for preview
@@ -68,6 +70,7 @@ const App: React.FC = () => {
                  masterAudioBufferRef.current = buffer;
                  const analysis = analyzeBeats(buffer);
                  setBeatGrid(analysis);
+                 setIntroSkipFrames(0);
                  const waveformPoints = Math.min(4000, Math.max(600, Math.floor(buffer.duration * 60)));
                  setWaveform(generateWaveform(buffer, waveformPoints));
                  setDuration(buffer.duration * 1000);
@@ -78,7 +81,7 @@ const App: React.FC = () => {
                         ...t, 
                         segments: [{ 
                             id: uuidv4(), 
-                            sourceClipId: 'audio-main', // placeholder
+                            sourceClipId: clipId,
                             timelineStart: 0, 
                             duration: buffer.duration * 1000, 
                             sourceStartOffset: 0 
@@ -101,7 +104,7 @@ const App: React.FC = () => {
         }
 
         newClips.push({
-            id: uuidv4(),
+            id: clipId,
             fileHandle: file,
             duration: duration || 1000,
             thumbnailUrl: '', // Could generate using canvas
@@ -220,6 +223,28 @@ const App: React.FC = () => {
       })));
   };
 
+  const handleUpdateIntroSkipFrames = (nextFrames: number) => {
+      if (beatGrid.beats.length === 0) {
+          setIntroSkipFrames(Math.round(nextFrames));
+          return;
+      }
+      const minBeat = Math.min(...beatGrid.beats);
+      const maxNegativeFrames = Math.floor(minBeat * DEFAULT_FPS);
+      const clampedFrames = Math.max(-maxNegativeFrames, Math.round(nextFrames));
+      const deltaFrames = clampedFrames - introSkipFrames;
+      if (deltaFrames === 0) {
+          setIntroSkipFrames(clampedFrames);
+          return;
+      }
+      const deltaSec = deltaFrames / DEFAULT_FPS;
+      setBeatGrid(prev => ({
+          ...prev,
+          offset: prev.offset + deltaSec,
+          beats: prev.beats.map(beat => Math.max(0, beat + deltaSec))
+      }));
+      setIntroSkipFrames(clampedFrames);
+  };
+
   // --- Export Logic (FFmpeg command generation) ---
   const handleExport = () => {
       // Construct the complex filter command
@@ -329,9 +354,11 @@ const App: React.FC = () => {
             {/* Right: Inspector */}
             <Inspector 
                 selectedSegmentId={selectedSegmentId}
-                segments={tracks.find(t => t.type === 'video')?.segments || []}
+                tracks={tracks}
                 clips={clips}
                 onUpdateSegment={handleUpdateSegment}
+                introSkipFrames={introSkipFrames}
+                onUpdateIntroSkipFrames={handleUpdateIntroSkipFrames}
             />
         </div>
     </div>

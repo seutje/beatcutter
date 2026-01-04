@@ -118,25 +118,36 @@ const Timeline: React.FC<TimelineProps> = ({
                             ))}
 
                         {/* Segments */}
-                        {track.segments.map((seg) => (
+                        {track.segments.map((seg) => {
+                            const isSelected = selectedSegmentId === seg.id;
+                            const isAudioTrack = track.type === 'audio';
+                            const baseClass = isAudioTrack
+                                ? 'border-emerald-300/70'
+                                : isSelected
+                                    ? 'bg-indigo-500 border-indigo-300 shadow-lg shadow-indigo-500/20 z-20'
+                                    : 'bg-indigo-900/60 border-indigo-700 hover:bg-indigo-800/80 hover:border-indigo-500 z-10';
+                            const audioClass = isSelected
+                                ? 'bg-emerald-400/20 shadow-[0_0_10px_rgba(16,185,129,0.35)]'
+                                : 'bg-emerald-400/10 hover:bg-emerald-400/15 z-10';
+                            return (
                             <div
                                 key={seg.id}
                                 onClick={(e) => { e.stopPropagation(); onSelectSegment(seg.id); }}
                                 className={`absolute top-2 bottom-2 rounded cursor-pointer overflow-hidden border transition-colors ${
-                                    selectedSegmentId === seg.id 
-                                    ? 'bg-indigo-500 border-indigo-300 shadow-lg shadow-indigo-500/20 z-20' 
-                                    : 'bg-indigo-900/60 border-indigo-700 hover:bg-indigo-800/80 hover:border-indigo-500 z-10'
+                                    isAudioTrack ? `${baseClass} ${audioClass}` : baseClass
                                 }`}
                                 style={{
                                     left: `${(seg.timelineStart / 1000) * zoom}px`,
                                     width: `${(seg.duration / 1000) * zoom}px`
                                 }}
                             >
-                                <div className="p-1 text-[10px] text-indigo-100 truncate opacity-75">
-                                    {(seg.duration / 1000).toFixed(2)}s
-                                </div>
+                                {!isAudioTrack && (
+                                    <div className="p-1 text-[10px] text-indigo-100 truncate opacity-75">
+                                        {(seg.duration / 1000).toFixed(2)}s
+                                    </div>
+                                )}
                             </div>
-                        ))}
+                        )})}
                     </div>
                 ))}
 

@@ -1,15 +1,24 @@
 import React from 'react';
-import { ClipSegment, SourceClip } from '../types';
+import { ClipSegment, SourceClip, TimelineTrack } from '../types';
 
 interface InspectorProps {
     selectedSegmentId: string | null;
-    segments: ClipSegment[];
+    tracks: TimelineTrack[];
     clips: SourceClip[];
     onUpdateSegment: (id: string, updates: Partial<ClipSegment>) => void;
+    introSkipFrames: number;
+    onUpdateIntroSkipFrames: (frames: number) => void;
 }
 
-const Inspector: React.FC<InspectorProps> = ({ selectedSegmentId, segments, clips, onUpdateSegment }) => {
-    const segment = segments.find(s => s.id === selectedSegmentId);
+const Inspector: React.FC<InspectorProps> = ({
+    selectedSegmentId,
+    tracks,
+    clips,
+    onUpdateSegment,
+    introSkipFrames,
+    onUpdateIntroSkipFrames
+}) => {
+    const segment = tracks.flatMap(track => track.segments).find(s => s.id === selectedSegmentId);
     const sourceClip = segment ? clips.find(c => c.id === segment.sourceClipId) : null;
 
     if (!segment || !sourceClip) {
@@ -52,29 +61,62 @@ const Inspector: React.FC<InspectorProps> = ({ selectedSegmentId, segments, clip
                     </div>
                 </div>
 
-                <div>
-                    <label className="block text-xs text-gray-500 mb-2 uppercase">Slip (Source Offset)</label>
-                    <div className="space-y-2">
-                         <div className="flex justify-between text-xs text-gray-400">
-                            <span>0s</span>
-                            <span>{(sourceClip.duration / 1000).toFixed(1)}s</span>
-                         </div>
-                         <input 
-                            type="range"
-                            min={0}
-                            max={sourceClip.duration - segment.duration}
-                            value={segment.sourceStartOffset}
-                            onChange={(e) => onUpdateSegment(segment.id, { sourceStartOffset: Number(e.target.value) })}
-                            className="w-full h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-indigo-500"
-                         />
-                         <div className="text-right text-xs text-indigo-400">
-                            +{(segment.sourceStartOffset / 1000).toFixed(2)}s
-                         </div>
+                {sourceClip.type === 'audio' && (
+                    <div>
+                        <label className="block text-xs text-gray-500 mb-2 uppercase">Intro skip</label>
+                        <div className="flex items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={() => onUpdateIntroSkipFrames(introSkipFrames - 1)}
+                                className="w-8 h-8 rounded bg-gray-800 border border-gray-700 text-gray-300 hover:bg-gray-700"
+                            >
+                                -
+                            </button>
+                            <input
+                                type="number"
+                                value={introSkipFrames}
+                                onChange={(e) => onUpdateIntroSkipFrames(Number(e.target.value))}
+                                className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-gray-300"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => onUpdateIntroSkipFrames(introSkipFrames + 1)}
+                                className="w-8 h-8 rounded bg-gray-800 border border-gray-700 text-gray-300 hover:bg-gray-700"
+                            >
+                                +
+                            </button>
+                        </div>
+                        <p className="text-xs text-gray-600 mt-2 leading-relaxed">
+                            Adjust the beat grid so the first beat lands on the right frame.
+                        </p>
                     </div>
-                    <p className="text-xs text-gray-600 mt-2 leading-relaxed">
-                        Adjusting the slider changes which part of the original video plays during this segment without moving it on the timeline.
-                    </p>
-                </div>
+                )}
+
+                {sourceClip.type === 'video' && (
+                    <div>
+                        <label className="block text-xs text-gray-500 mb-2 uppercase">Slip (Source Offset)</label>
+                        <div className="space-y-2">
+                            <div className="flex justify-between text-xs text-gray-400">
+                                <span>0s</span>
+                                <span>{(sourceClip.duration / 1000).toFixed(1)}s</span>
+                            </div>
+                            <input
+                                type="range"
+                                min={0}
+                                max={sourceClip.duration - segment.duration}
+                                value={segment.sourceStartOffset}
+                                onChange={(e) => onUpdateSegment(segment.id, { sourceStartOffset: Number(e.target.value) })}
+                                className="w-full h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                            />
+                            <div className="text-right text-xs text-indigo-400">
+                                +{(segment.sourceStartOffset / 1000).toFixed(2)}s
+                            </div>
+                        </div>
+                        <p className="text-xs text-gray-600 mt-2 leading-relaxed">
+                            Adjusting the slider changes which part of the original video plays during this segment without moving it on the timeline.
+                        </p>
+                    </div>
+                )}
             </div>
         </div>
     );
