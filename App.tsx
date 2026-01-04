@@ -182,9 +182,16 @@ const App: React.FC = () => {
           const dataUrl = await readFileAsDataUrl(audioClip.fileHandle);
           const base64Data = dataUrl.split(',')[1];
           const mimeType = audioClip.fileHandle.type || 'audio/mpeg';
+          const videoClips = clips.filter(c => c.type === 'video');
+          const clipDurationsSec = videoClips.map(c => c.duration / 1000);
+          const shortestClipSec = clipDurationsSec.length > 0 ? Math.min(...clipDurationsSec) : 0;
           const prompt = [
               'Analyze this audio track and return a JSON object with these fields:',
               'bpm (number), clip_length_bars (number), intro_skip_frames (number).',
+              `Imported video clip durations in seconds: ${clipDurationsSec.map(sec => sec.toFixed(2)).join(', ') || 'none'}.`,
+              `Shortest clip length is ${shortestClipSec.toFixed(2)}s.`,
+              'Choose clip_length_bars so that the clip length in seconds (bars * 60 * 4 / bpm) does not exceed the shortest clip length.',
+              'intro_skip_frames means the number of frames to skip before the first beat so the first clip starts at that frame and all cuts line up with the beats and especially with the drop.',
               'If unsure, provide best estimates. Return JSON only.'
           ].join(' ');
 
