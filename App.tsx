@@ -273,6 +273,21 @@ const App: React.FC = () => {
       setAutoSyncOpen(false);
   };
 
+  const buildAutoSyncPreviewGrid = (nextBpm: number, nextIntroSkipFrames: number) => {
+      const clampedBpm = Math.min(300, Math.max(30, Number(nextBpm)));
+      const normalizedIntroSkipFrames = Math.round(Number(nextIntroSkipFrames));
+      const baseOffset = 0;
+      const introSkipSec = normalizedIntroSkipFrames / DEFAULT_FPS;
+      const rebuilt = buildBeatGrid(clampedBpm, baseOffset, duration / 1000);
+      const shiftedBeats = rebuilt.beats.map(beat => Math.max(0, beat + introSkipSec));
+      return {
+          ...rebuilt,
+          offset: rebuilt.offset + introSkipSec,
+          beats: [...new Set(shiftedBeats)].sort((a, b) => a - b),
+          bpm: clampedBpm
+      };
+  };
+
   const togglePlay = () => {
     if (playbackState.isPlaying) {
         pause();
@@ -523,7 +538,11 @@ const App: React.FC = () => {
                 <Timeline 
                     tracks={tracks} 
                     playbackState={playbackState} 
-                    beatGrid={beatGrid}
+                    beatGrid={
+                      autoSyncOpen && Number.isFinite(autoSyncBpm) && Number.isFinite(autoSyncIntroSkipFrames)
+                        ? buildAutoSyncPreviewGrid(autoSyncBpm, autoSyncIntroSkipFrames)
+                        : beatGrid
+                    }
                     waveform={waveform}
                     zoom={zoom}
                     duration={duration}
