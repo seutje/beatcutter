@@ -1,0 +1,5 @@
+{
+  "name": "BeatCutter",
+  "description": "A browser-based music video editor that automatically syncs video clips to audio beats using client-side analysis and timeline editing.",
+  "requestFramePermissions": []
+}
