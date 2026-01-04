@@ -1,5 +1,10 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
+import { FFmpeg } from '@ffmpeg/ffmpeg';
+import { fetchFile } from '@ffmpeg/util';
+import coreURL from '@ffmpeg/core?url';
+import wasmURL from '@ffmpeg/core/wasm?url';
+import workerURL from '@ffmpeg/ffmpeg/worker?url';
 import { Project, SourceClip, TimelineTrack, BeatGrid, PlaybackState, ClipSegment } from './types';
 import { decodeAudio, analyzeBeats, buildBeatGrid, generateWaveform } from './services/audioUtils';
 import { autoSyncClips } from './services/syncEngine';
@@ -34,6 +39,12 @@ const App: React.FC = () => {
   const [autoSyncIntroSkipFrames, setAutoSyncIntroSkipFrames] = useState<number>(0);
   const [autoSyncError, setAutoSyncError] = useState<string | null>(null);
   const [autoSyncAnalyzing, setAutoSyncAnalyzing] = useState<boolean>(false);
+  const [exportOpen, setExportOpen] = useState<boolean>(false);
+  const [exportResolution, setExportResolution] = useState<string>('1920x1080');
+  const [exportMbps, setExportMbps] = useState<number>(12);
+  const [exporting, setExporting] = useState<boolean>(false);
+  const [exportProgress, setExportProgress] = useState<number>(0);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   // --- Refs for Audio Engine ---
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -42,6 +53,7 @@ const App: React.FC = () => {
   const masterAudioBufferRef = useRef<AudioBuffer | null>(null);
   const startTimeRef = useRef<number>(0);
   const animationFrameRef = useRef<number>(0);
+  const ffmpegRef = useRef<FFmpeg | null>(null);
 
   // --- Handlers ---
 
@@ -143,6 +155,18 @@ const App: React.FC = () => {
   const closeAutoSyncDialog = () => {
       setAutoSyncOpen(false);
       setAutoSyncError(null);
+  };
+
+  const openExportDialog = () => {
+      setExportProgress(0);
+      setExportError(null);
+      setExportOpen(true);
+  };
+
+  const closeExportDialog = () => {
+      if (exporting) return;
+      setExportOpen(false);
+      setExportError(null);
   };
 
   const readFileAsDataUrl = (file: File): Promise<string> => new Promise((resolve, reject) => {
@@ -477,68 +501,138 @@ const App: React.FC = () => {
       handleUpdateBpm(nextBpm);
   }, [handleUpdateBpm]);
 
-  // --- Export Logic (FFmpeg command generation) ---
-  const handleExport = () => {
-      // Construct the complex filter command
+  // --- Export Logic (FFmpeg WASM) ---
+  const handleExport = async () => {
       const videoSegments = tracks.find(t => t.type === 'video')?.segments || [];
-      const audioTrack = tracks.find(t => t.type === 'audio'); // Assuming single audio file for now
-      
       if (videoSegments.length === 0) {
-          alert("Nothing to export!");
+          setExportError('Nothing to export yet. Add video clips to the timeline.');
           return;
       }
+      const audioSegment = tracks.find(t => t.type === 'audio')?.segments[0] || null;
+      const audioClip = audioSegment ? clips.find(c => c.id === audioSegment.sourceClipId) : null;
 
-      // Collect unique inputs
-      const inputs = new Map<string, number>(); // clipId -> inputIndex
-      const inputList: string[] = [];
-      let inputCounter = 0;
+      setExporting(true);
+      setExportProgress(0);
+      setExportError(null);
 
-      // Add audio input
-      const audioInputIndex = inputCounter++;
-      const audioFileName = "master_audio.mp3"; // Placeholder name
-      inputList.push(`-i "${audioFileName}"`);
+      const [targetWidth, targetHeight] = exportResolution.split('x').map(Number);
+      const outputFile = 'beatcutter-export.mp4';
+      const fsInputs: string[] = [];
+      const inputMap = new Map<string, { index: number; name: string }>();
+      let inputIndex = 0;
 
-      // Add video inputs
-      videoSegments.forEach(seg => {
-          if (!inputs.has(seg.sourceClipId)) {
-              const clip = clips.find(c => c.id === seg.sourceClipId);
+      const buildSafeName = (clip: SourceClip) => {
+          const base = clip.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+          return `${clip.id}_${base || 'clip'}`;
+      };
+
+      const writeClipToFs = async (clip: SourceClip) => {
+          const name = buildSafeName(clip);
+          if (inputMap.has(clip.id)) return inputMap.get(clip.id)!;
+          const data = await fetchFile(clip.fileHandle);
+          await ffmpegRef.current!.writeFile(name, data);
+          const mapped = { index: inputIndex++, name };
+          inputMap.set(clip.id, mapped);
+          fsInputs.push(name);
+          return mapped;
+      };
+
+      let didSucceed = false;
+      try {
+          const ffmpeg = new FFmpeg();
+          ffmpegRef.current = ffmpeg;
+
+          ffmpeg.on('progress', ({ progress }) => {
+              if (!Number.isFinite(progress)) return;
+              setExportProgress(Math.min(100, Math.round(progress * 100)));
+          });
+
+          await ffmpeg.load({
+              coreURL,
+              wasmURL,
+              workerURL,
+          });
+
+          const sortedSegments = [...videoSegments].sort((a, b) => a.timelineStart - b.timelineStart);
+          for (const segment of sortedSegments) {
+              const clip = clips.find(c => c.id === segment.sourceClipId);
               if (clip) {
-                  inputs.set(seg.sourceClipId, inputCounter++);
-                  inputList.push(`-i "${clip.name}"`);
+                  await writeClipToFs(clip);
               }
           }
-      });
 
-      // Build Filter Complex
-      let filterComplex = "";
-      let concatInputs = "";
+          let audioInputIndex: number | null = null;
+          if (audioClip) {
+              const audioInput = await writeClipToFs(audioClip);
+              audioInputIndex = audioInput.index;
+          }
 
-      videoSegments.forEach((seg, idx) => {
-          const inputIdx = inputs.get(seg.sourceClipId);
-          const startSec = seg.sourceStartOffset / 1000;
-          const durationSec = seg.duration / 1000;
-          const scale = "scale=1920:1080"; // standardize resolution
-          
-          // Trimming and resetting timestamps
-          // [0:v]trim=start=10:duration=2,setpts=PTS-STARTPTS,scale=1920:1080[v0];
-          filterComplex += `[${inputIdx}:v]trim=start=${startSec.toFixed(3)}:duration=${durationSec.toFixed(3)},setpts=PTS-STARTPTS,${scale}[v${idx}];`;
-          concatInputs += `[v${idx}]`;
-      });
+          const filterParts: string[] = [];
+          const concatInputs: string[] = [];
+          sortedSegments.forEach((segment, idx) => {
+              const input = inputMap.get(segment.sourceClipId);
+              if (!input) return;
+              const startSec = segment.sourceStartOffset / 1000;
+              const durationSec = segment.duration / 1000;
+              filterParts.push(
+                  `[${input.index}:v]trim=start=${startSec.toFixed(3)}:duration=${durationSec.toFixed(3)},` +
+                  `setpts=PTS-STARTPTS,scale=${targetWidth}:${targetHeight},fps=${DEFAULT_FPS}[v${idx}]`
+              );
+              concatInputs.push(`[v${idx}]`);
+          });
 
-      // Concat
-      filterComplex += `${concatInputs}concat=n=${videoSegments.length}:v=1:a=0[outv]`;
+          const filterComplex = `${filterParts.join(';')};${concatInputs.join('')}concat=n=${concatInputs.length}:v=1:a=0[outv]`;
+          const args: string[] = [];
+          inputMap.forEach((input) => {
+              args.push('-i', input.name);
+          });
+          args.push(
+              '-filter_complex', filterComplex,
+              '-map', '[outv]'
+          );
+          if (audioInputIndex !== null) {
+              args.push('-map', `${audioInputIndex}:a`, '-shortest');
+          }
+          const safeMbps = Number.isFinite(exportMbps) && exportMbps > 0 ? exportMbps : 8;
+          args.push(
+              '-c:v', 'libx264',
+              '-preset', 'veryfast',
+              '-r', `${DEFAULT_FPS}`,
+              '-b:v', `${Math.max(1, safeMbps).toFixed(0)}M`,
+              '-c:a', 'aac',
+              outputFile
+          );
 
-      const ffmpegCommand = `ffmpeg ${inputList.join(' ')} -filter_complex "${filterComplex}" -map "[outv]" -map ${audioInputIndex}:a -c:v libx264 -preset ultrafast -c:a aac output.mp4`;
-
-      console.log("GENERATED FFMPEG COMMAND:", ffmpegCommand);
-      
-      const blob = new Blob([ffmpegCommand], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'export_command.sh';
-      a.click();
-      alert("Export Manifest/Script downloaded! (Check console for full command). Browser-based FFmpeg execution requires SharedArrayBuffer headers which may not be present in this preview environment.");
+          await ffmpeg.exec(args);
+          setExportProgress(100);
+          const data = await ffmpeg.readFile(outputFile);
+          const blob = new Blob([data instanceof Uint8Array ? data : new Uint8Array(data as ArrayBuffer)], { type: 'video/mp4' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = outputFile;
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+          didSucceed = true;
+      } catch (error) {
+          console.error('Export failed', error);
+          setExportError('Export failed. Check the console for details.');
+      } finally {
+          try {
+              if (ffmpegRef.current) {
+                  const filesToDelete = [...fsInputs, outputFile];
+                  await Promise.all(filesToDelete.map(file => ffmpegRef.current!.deleteFile(file).catch(() => undefined)));
+                  await ffmpegRef.current.terminate();
+              }
+          } catch (cleanupError) {
+              console.warn('FFmpeg cleanup failed', cleanupError);
+          }
+          ffmpegRef.current = null;
+          setExporting(false);
+          if (didSucceed) {
+              setExportOpen(false);
+          }
+      }
   };
 
   // --- Render ---
@@ -548,7 +642,7 @@ const App: React.FC = () => {
             playbackState={playbackState} 
             onTogglePlay={togglePlay} 
             onJumpToStart={handleJumpToStart}
-            onExport={handleExport}
+            onExport={openExportDialog}
             onAutoSync={openAutoSyncDialog}
             canSync={clips.some(c => c.type === 'video') && beatGrid.beats.length > 0}
             canOpenAutoSync={clips.length > 0}
@@ -710,6 +804,108 @@ const App: React.FC = () => {
                   className="px-4 py-2 text-sm font-semibold rounded bg-amber-500 hover:bg-amber-400 text-stone-950"
                 >
                   Auto-Sync Clips
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {exportOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+            <div
+              role="dialog"
+              aria-modal="true"
+              className="w-[420px] max-w-[90vw] rounded-lg border border-stone-800 bg-stone-900 shadow-xl"
+            >
+              <div className="flex items-center justify-between px-5 py-4 border-b border-stone-800">
+                <div>
+                  <h2 className="text-lg font-semibold text-stone-100">Export Video</h2>
+                  <p className="text-xs text-stone-400 mt-1">Render the timeline with FFmpeg WASM.</p>
+                </div>
+                <button
+                  onClick={closeExportDialog}
+                  className="text-stone-400 hover:text-stone-200"
+                  aria-label="Close export dialog"
+                  disabled={exporting}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="p-5 space-y-4">
+                <div>
+                  <label className="block text-xs text-stone-400 mb-2 uppercase">Resolution</label>
+                  <select
+                    value={exportResolution}
+                    onChange={(e) => setExportResolution(e.target.value)}
+                    className="w-full bg-stone-800 border border-stone-700 rounded px-3 py-2 text-sm text-stone-200"
+                    disabled={exporting}
+                  >
+                    <option value="1280x720">720p (1280x720)</option>
+                    <option value="1920x1080">1080p (1920x1080)</option>
+                    <option value="3840x2160">4K (3840x2160)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-stone-400 mb-2 uppercase">Video Bitrate (Mbps)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={200}
+                    step={1}
+                    value={exportMbps}
+                    onChange={(e) => {
+                      const nextValue = Number(e.target.value);
+                      setExportMbps(Number.isFinite(nextValue) ? nextValue : 8);
+                    }}
+                    className="w-full bg-stone-800 border border-stone-700 rounded px-3 py-2 text-sm text-stone-200"
+                    disabled={exporting}
+                  />
+                </div>
+
+                {exportError && (
+                  <div className="text-sm text-rose-300 bg-rose-500/10 border border-rose-500/40 rounded px-3 py-2">
+                    {exportError}
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs text-stone-500">
+                    <span>Progress</span>
+                    <span>{exportProgress}%</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-stone-800 overflow-hidden">
+                    <div
+                      className="h-full bg-blue-500 transition-all"
+                      style={{ width: `${exportProgress}%` }}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between text-xs text-stone-500">
+                  <span>Large exports may take a while.</span>
+                  {exporting && <span className="text-amber-300">Exporting…</span>}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-stone-800">
+                <button
+                  onClick={closeExportDialog}
+                  className="px-4 py-2 rounded border border-stone-700 text-stone-200 hover:bg-stone-800"
+                  disabled={exporting}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleExport}
+                  disabled={exporting}
+                  className={`px-5 py-2 rounded font-semibold ${
+                    exporting
+                      ? 'bg-stone-700 text-stone-400 cursor-not-allowed'
+                      : 'bg-blue-600 hover:bg-blue-500 text-white'
+                  }`}
+                >
+                  Export
                 </button>
               </div>
             </div>

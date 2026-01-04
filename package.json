@@ -9,6 +9,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@ffmpeg/ffmpeg": "^0.12.10",
+    "@ffmpeg/core": "^0.12.6",
+    "@ffmpeg/util": "^0.12.2",
     "react-dom": "^19.2.3",
     "lucide-react": "^0.562.0",
     "react": "^19.2.3",

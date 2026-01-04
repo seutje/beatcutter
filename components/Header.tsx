@@ -78,7 +78,7 @@ const Header: React.FC<HeaderProps> = ({
                     className="flex items-center gap-2 px-4 py-2 bg-blue-700 hover:bg-blue-600 text-white rounded font-medium transition-colors"
                 >
                     <Download size={16} />
-                    Export FFmpeg
+                    Export
                 </button>
             </div>
         </header>
