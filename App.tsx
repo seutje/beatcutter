@@ -221,10 +221,30 @@ const App: React.FC = () => {
   };
 
   const handleUpdateSegment = (id: string, updates: Partial<ClipSegment>) => {
-      setTracks(prev => prev.map(t => ({
-          ...t,
-          segments: t.segments.map(s => s.id === id ? { ...s, ...updates } : s)
-      })));
+      setTracks(prev => prev.map(t => {
+          const target = t.segments.find(s => s.id === id);
+          if (!target) {
+              return {
+                  ...t,
+                  segments: t.segments.map(s => s.id === id ? { ...s, ...updates } : s)
+              };
+          }
+
+          const nextDuration = updates.duration ?? target.duration;
+          const delta = nextDuration - target.duration;
+          const oldEnd = target.timelineStart + target.duration;
+          const shiftedSegments = t.segments.map(s => {
+              if (s.id === id) {
+                  return { ...s, ...updates, duration: nextDuration };
+              }
+              if (delta !== 0 && s.timelineStart >= oldEnd) {
+                  return { ...s, timelineStart: s.timelineStart + delta };
+              }
+              return s;
+          });
+
+          return { ...t, segments: shiftedSegments };
+      }));
   };
 
   const handleUpdateIntroSkipFrames = (nextFrames: number) => {

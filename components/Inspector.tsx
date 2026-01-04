@@ -37,6 +37,9 @@ const Inspector: React.FC<InspectorProps> = ({
         );
     }
 
+    const barDurationMs = Number.isFinite(barLengthSec) ? barLengthSec * 1000 : 0;
+    const durationBars = barDurationMs > 0 ? segment.duration / barDurationMs : 0;
+
     return (
         <div className="w-[300px] bg-gray-900 border-l border-gray-800 flex flex-col h-full overflow-y-auto">
             <div className="p-4 border-b border-gray-800">
@@ -63,6 +66,29 @@ const Inspector: React.FC<InspectorProps> = ({
                                 type="number" 
                                 value={Math.round(segment.duration)}
                                 disabled
+                                className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-gray-300"
+                            />
+                         </div>
+                         <div>
+                            <span className="text-xs text-gray-400 block mb-1">Duration (bars)</span>
+                            <input
+                                type="number"
+                                min={0.5}
+                                max={8}
+                                step={0.5}
+                                value={Number.isFinite(durationBars) ? Number(durationBars.toFixed(2)) : 1}
+                                onChange={(e) => {
+                                    const nextBars = Number(e.target.value);
+                                    if (!Number.isFinite(nextBars) || barDurationMs <= 0) return;
+                                    const clampedBars = Math.min(8, Math.max(0.5, nextBars));
+                                    const nextDuration = clampedBars * barDurationMs;
+                                    const maxOffset = Math.max(0, sourceClip.duration);
+                                    const clampedOffset = Math.min(segment.sourceStartOffset, maxOffset);
+                                    onUpdateSegment(segment.id, {
+                                        duration: nextDuration,
+                                        sourceStartOffset: clampedOffset
+                                    });
+                                }}
                                 className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-gray-300"
                             />
                          </div>

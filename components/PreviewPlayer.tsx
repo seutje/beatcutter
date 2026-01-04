@@ -45,10 +45,13 @@ const PreviewPlayer: React.FC<PreviewPlayerProps> = ({ playbackState, videoTrack
         const sourceClip = clips.find(c => c.id === currentSegment.sourceClipId);
         if (!sourceClip) return;
 
-        // Calculate the seek time within the source file
-        // Current Time in Project - Segment Start + Segment Offset in Source
+        // Calculate the seek time within the source file.
+        // If the segment duration exceeds the remaining clip duration, slow playback to fit.
         const offsetInSegment = currentTime - currentSegment.timelineStart;
-        const targetSourceTime = (currentSegment.sourceStartOffset + offsetInSegment) / 1000;
+        const availableDuration = Math.max(0, sourceClip.duration - currentSegment.sourceStartOffset);
+        const needsStretch = availableDuration > 0 && currentSegment.duration > availableDuration;
+        const stretchRate = needsStretch ? availableDuration / currentSegment.duration : 1;
+        const targetSourceTime = (currentSegment.sourceStartOffset + offsetInSegment * stretchRate) / 1000;
 
         const player = playerARef.current;
         
@@ -84,11 +87,17 @@ const PreviewPlayer: React.FC<PreviewPlayerProps> = ({ playbackState, videoTrack
             }
 
             if (playbackState.isPlaying) {
+                if (player.playbackRate !== stretchRate) {
+                    player.playbackRate = stretchRate;
+                }
                 // Ensure playing
                 if (player.paused) {
                     player.play().catch(e => console.warn("Auto-play prevented or error:", e));
                 }
             } else {
+                if (player.playbackRate !== stretchRate) {
+                    player.playbackRate = stretchRate;
+                }
                 if (!player.paused) player.pause();
             }
         }
