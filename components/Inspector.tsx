@@ -77,9 +77,9 @@ const Inspector: React.FC<InspectorProps> = ({
                                 <span className="text-xs text-gray-400 block mb-1">BPM</span>
                                 <input
                                     type="number"
-                                    min={30}
+                                    min={1}
                                     max={300}
-                                    step={0.1}
+                                    step={1}
                                     value={Number.isFinite(bpm) ? Number(bpm.toFixed(1)) : 120}
                                     onChange={(e) => onUpdateBpm(Number(e.target.value))}
                                     className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-gray-300"
@@ -90,8 +90,8 @@ const Inspector: React.FC<InspectorProps> = ({
                                 <input
                                     type="number"
                                     min={0.1}
-                                    step={0.01}
-                                    value={Number.isFinite(barLengthSec) ? Number(barLengthSec.toFixed(2)) : 2}
+                                    step={0.001}
+                                    value={Number.isFinite(barLengthSec) ? Number(barLengthSec.toFixed(3)) : 2}
                                     onChange={(e) => onUpdateBarLength(Number(e.target.value))}
                                     className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-gray-300"
                                 />
