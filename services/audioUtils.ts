@@ -91,13 +91,12 @@ export const buildBeatGrid = (bpm: number, offset: number, durationSec: number):
   const cleanBeats: number[] = [];
   const spb = 60 / bpm;
 
-  // Backfill beats to 0 (or slightly before)
-  let t = offset;
+  const start = Number.isFinite(offset) ? offset : 0;
+  let t = start;
   while (t > 0) {
     t -= spb;
   }
 
-  // Forward fill
   while (t < durationSec) {
     if (t >= -0.1) {
       cleanBeats.push(Math.max(0, t));
@@ -110,7 +109,7 @@ export const buildBeatGrid = (bpm: number, offset: number, durationSec: number):
 
   return {
     bpm,
-    offset,
+    offset: start,
     beats: uniqueBeats,
   };
 };
