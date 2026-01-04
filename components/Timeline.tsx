@@ -48,7 +48,7 @@ const Timeline: React.FC<TimelineProps> = ({
     }, [beatGrid, zoom]);
 
     return (
-        <div className="flex-1 bg-gray-900 overflow-x-auto overflow-y-hidden relative select-none custom-scrollbar border-t border-gray-800 h-64 flex flex-col">
+        <div className="flex-1 bg-gray-900 overflow-x-auto overflow-y-hidden relative select-none custom-scrollbar border-t border-gray-800 h-64 flex flex-col min-w-0">
             {/* Time Ruler */}
             <div 
                 className="h-8 bg-gray-800 border-b border-gray-700 sticky top-0 z-10 cursor-pointer"

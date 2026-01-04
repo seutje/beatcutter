@@ -26,9 +26,19 @@ const PreviewPlayer: React.FC<PreviewPlayerProps> = ({ playbackState, videoTrack
         );
 
         if (!currentSegment) {
-            // Pause underlying players if no segment
-            if(playerARef.current && !playerARef.current.paused) playerARef.current.pause();
-            if(playerBRef.current && !playerBRef.current.paused) playerBRef.current.pause();
+            // Pause and clear underlying players if no segment
+            if (playerARef.current) {
+                if (!playerARef.current.paused) playerARef.current.pause();
+                playerARef.current.removeAttribute('data-clip-id');
+                playerARef.current.removeAttribute('src');
+                playerARef.current.load();
+            }
+            if (playerBRef.current) {
+                if (!playerBRef.current.paused) playerBRef.current.pause();
+                playerBRef.current.removeAttribute('data-clip-id');
+                playerBRef.current.removeAttribute('src');
+                playerBRef.current.load();
+            }
             return;
         }
 
@@ -49,19 +59,28 @@ const PreviewPlayer: React.FC<PreviewPlayerProps> = ({ playbackState, videoTrack
             if (currentSrc !== sourceClip.id) {
                 player.src = sourceClip.objectUrl;
                 player.setAttribute('data-clip-id', sourceClip.id);
-                player.load(); 
+                player.load();
             }
 
-            // Sync Time
-            // Optimization: Only set currentTime if it's significantly off (>0.2s) or if we are not playing.
-            // When playing, the video element handles its own time, we just check for drift.
-            const timeDiff = Math.abs(player.currentTime - targetSourceTime);
-            
-            if (timeDiff > 0.2 || !playbackState.isPlaying) {
-                 // Safe checking for valid time
-                 if (Number.isFinite(targetSourceTime)) {
-                     player.currentTime = targetSourceTime;
-                 }
+            const seekToTarget = () => {
+                if (!Number.isFinite(targetSourceTime)) return;
+                const durationSec = Number.isFinite(player.duration) && player.duration > 0 ? player.duration : null;
+                const clampedTarget = durationSec ? Math.min(targetSourceTime, Math.max(0, durationSec - 0.05)) : targetSourceTime;
+                const timeDiff = Math.abs(player.currentTime - clampedTarget);
+                if (timeDiff > 0.2 || !playbackState.isPlaying) {
+                    try {
+                        player.currentTime = clampedTarget;
+                    } catch (e) {
+                        console.warn("Seek failed:", e);
+                    }
+                }
+            };
+
+            // Sync Time after metadata is available
+            if (player.readyState >= 1) {
+                seekToTarget();
+            } else {
+                player.onloadedmetadata = seekToTarget;
             }
 
             if (playbackState.isPlaying) {

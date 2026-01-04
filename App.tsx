@@ -298,7 +298,7 @@ const App: React.FC = () => {
             <MediaPool clips={clips} onImport={handleImport} onDelete={handleDeleteClip} />
 
             {/* Center: Preview Stage */}
-            <div className="flex-1 flex flex-col bg-black relative">
+            <div className="flex-1 flex flex-col bg-black relative min-w-0">
                 <div className="flex-1 p-4 flex items-center justify-center">
                     <div className="aspect-video w-full max-w-4xl bg-gray-900 shadow-2xl rounded-lg overflow-hidden border border-gray-800">
                         <PreviewPlayer 
