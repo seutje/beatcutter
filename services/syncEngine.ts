@@ -10,9 +10,9 @@ export const autoSyncClips = (
 ): ClipSegment[] => {
     const beatsPerBar = BEATS_PER_BAR;
     const sanitizedBars = Number.isFinite(preferredBars) ? Math.max(1, Math.round(preferredBars)) : 4;
-    const allowedBarLengths = Array.from(new Set([sanitizedBars, 4, 2, 1]))
-        .map((bars) => bars * beatsPerBar)
-        .sort((a, b) => b - a);
+    const fallbackBars = [4, 2, 1].filter((bars) => bars < sanitizedBars);
+    const allowedBarLengths = Array.from(new Set([sanitizedBars, ...fallbackBars]))
+        .map((bars) => bars * beatsPerBar);
     const segments: ClipSegment[] = [];
     const orderedClips = [...clips].sort((a, b) =>
         a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })

@@ -195,7 +195,7 @@ const App: React.FC = () => {
               'If unsure, provide best estimates. Return JSON only.'
           ].join(' ');
 
-          const model = import.meta.env.VITE_GEMINI_MODEL || 'gemini-2.0-flash';
+          const model = import.meta.env.VITE_GEMINI_MODEL || 'gemini-3-flash-preview';
           const response = await fetch(
               `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
               {
