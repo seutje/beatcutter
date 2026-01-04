@@ -20,16 +20,35 @@ export const autoSyncClips = (
         // This logic simplifies; real logic might backfill
     }
 
-    // Iterate through beat intervals
-    for (let i = 0; i < beats.length - 1; i++) {
-        const startTime = beats[i] * 1000; // Convert to ms
-        const endTime = beats[i + 1] * 1000;
+    // Iterate through beat intervals, allowing clips to span multiple beats.
+    let beatIndex = 0;
+    while (beatIndex < beats.length - 1) {
+        const startTime = beats[beatIndex] * 1000; // Convert to ms
+
+        const clip = orderedClips[segmentIndex % orderedClips.length];
+        const maxEndTime = startTime + clip.duration;
+
+        // Find the last beat that fits within the clip length.
+        let endBeatIndex = beatIndex + 1;
+        while (endBeatIndex < beats.length && beats[endBeatIndex] * 1000 <= maxEndTime) {
+            endBeatIndex += 1;
+        }
+
+        let chosenEndBeatIndex = endBeatIndex - 1;
+        if (chosenEndBeatIndex <= beatIndex) {
+            // If the clip is shorter than a single beat interval, fall back to the next beat.
+            chosenEndBeatIndex = beatIndex + 1;
+        }
+        if (chosenEndBeatIndex >= beats.length) break;
+
+        const endTime = beats[chosenEndBeatIndex] * 1000;
         const duration = endTime - startTime;
 
         // Skip really short glitches
-        if (duration < 100) continue;
-
-        const clip = orderedClips[segmentIndex % orderedClips.length];
+        if (duration < 100) {
+            beatIndex += 1;
+            continue;
+        }
 
         // Determine a valid source offset
         // We want a random chunk of the video that fits the duration
@@ -52,6 +71,8 @@ export const autoSyncClips = (
 
         // Stop if we exceed total duration of audio
         if (startTime > totalDuration) break;
+
+        beatIndex = chosenEndBeatIndex;
     }
 
     return segments;
