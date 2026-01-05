@@ -33,6 +33,8 @@ const App: React.FC = () => {
   const [duration, setDuration] = useState<number>(30000); // 30s default
   const [zoom, setZoom] = useState<number>(DEFAULT_ZOOM);
   const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
+  const [swapMode, setSwapMode] = useState<boolean>(false);
+  const [swapSourceId, setSwapSourceId] = useState<string | null>(null);
   const [autoSyncOpen, setAutoSyncOpen] = useState<boolean>(false);
   const [autoSyncBpm, setAutoSyncBpm] = useState<number>(120);
   const [autoSyncBars, setAutoSyncBars] = useState<number>(4);
@@ -143,6 +145,114 @@ const App: React.FC = () => {
           ...t,
           segments: t.segments.filter(s => s.sourceClipId !== id)
       })));
+  };
+
+  const handleRemoveSegment = (id: string) => {
+      setTracks(prev => prev.map(t => {
+          const target = t.segments.find(s => s.id === id);
+          if (!target) {
+              return { ...t, segments: t.segments.filter(s => s.id !== id) };
+          }
+          const removedEnd = target.timelineStart + target.duration;
+          const nextSegments = t.segments
+              .filter(s => s.id !== id)
+              .map(s => {
+                  if (s.timelineStart >= removedEnd) {
+                      return { ...s, timelineStart: s.timelineStart - target.duration };
+                  }
+                  return s;
+              });
+          return { ...t, segments: nextSegments };
+      }));
+      if (selectedSegmentId === id) {
+          setSelectedSegmentId(null);
+      }
+      if (swapSourceId === id) {
+          setSwapMode(false);
+          setSwapSourceId(null);
+      }
+  };
+
+  const clampOffsetForClip = (clipId: string, durationMs: number, offsetMs: number) => {
+      const clip = clips.find(c => c.id === clipId);
+      const maxOffset = clip ? Math.max(0, clip.duration - durationMs) : 0;
+      return Math.min(Math.max(0, offsetMs), maxOffset);
+  };
+
+  const handleSwapSegments = (sourceId: string, targetId: string) => {
+      setTracks(prev => {
+          const sourceTrack = prev.find(t => t.segments.some(s => s.id === sourceId));
+          const targetTrack = prev.find(t => t.segments.some(s => s.id === targetId));
+          if (!sourceTrack || !targetTrack || sourceTrack.type !== targetTrack.type) {
+              return prev;
+          }
+
+          const sourceSegment = sourceTrack.segments.find(s => s.id === sourceId);
+          const targetSegment = targetTrack.segments.find(s => s.id === targetId);
+          if (!sourceSegment || !targetSegment) return prev;
+
+          const nextSourceOffset = clampOffsetForClip(
+              targetSegment.sourceClipId,
+              sourceSegment.duration,
+              targetSegment.sourceStartOffset
+          );
+          const nextTargetOffset = clampOffsetForClip(
+              sourceSegment.sourceClipId,
+              targetSegment.duration,
+              sourceSegment.sourceStartOffset
+          );
+
+          return prev.map(track => {
+              if (track.id !== sourceTrack.id && track.id !== targetTrack.id) {
+                  return track;
+              }
+              const nextSegments = track.segments.map(seg => {
+                  if (seg.id === sourceSegment.id) {
+                      return {
+                          ...seg,
+                          sourceClipId: targetSegment.sourceClipId,
+                          sourceStartOffset: nextSourceOffset
+                      };
+                  }
+                  if (seg.id === targetSegment.id) {
+                      return {
+                          ...seg,
+                          sourceClipId: sourceSegment.sourceClipId,
+                          sourceStartOffset: nextTargetOffset
+                      };
+                  }
+                  return seg;
+              });
+              return { ...track, segments: nextSegments };
+          });
+      });
+
+      setSwapMode(false);
+      setSwapSourceId(null);
+      setSelectedSegmentId(targetId);
+  };
+
+  const handleToggleSwapMode = (segmentId: string) => {
+      if (swapMode && swapSourceId === segmentId) {
+          setSwapMode(false);
+          setSwapSourceId(null);
+          return;
+      }
+      setSwapMode(true);
+      setSwapSourceId(segmentId);
+  };
+
+  const handleSelectSegment = (id: string) => {
+      if (swapMode && swapSourceId && id !== swapSourceId) {
+          const sourceTrack = tracks.find(t => t.segments.some(s => s.id === swapSourceId));
+          const targetTrack = tracks.find(t => t.segments.some(s => s.id === id));
+          if (sourceTrack && targetTrack && sourceTrack.type === targetTrack.type) {
+              handleSwapSegments(swapSourceId, id);
+              return;
+          }
+          return;
+      }
+      setSelectedSegmentId(id);
   };
 
   const openAutoSyncDialog = () => {
@@ -708,7 +818,7 @@ const App: React.FC = () => {
                     zoom={zoom}
                     duration={duration}
                     onSeek={handleSeek}
-                    onSelectSegment={setSelectedSegmentId}
+                    onSelectSegment={handleSelectSegment}
                     selectedSegmentId={selectedSegmentId}
                 />
             </div>
@@ -719,6 +829,10 @@ const App: React.FC = () => {
                 tracks={tracks}
                 clips={clips}
                 onUpdateSegment={handleUpdateSegment}
+                onRemoveSegment={handleRemoveSegment}
+                swapMode={swapMode}
+                swapSourceId={swapSourceId}
+                onToggleSwapMode={handleToggleSwapMode}
                 introSkipFrames={introSkipFrames}
                 onUpdateIntroSkipFrames={handleUpdateIntroSkipFrames}
                 bpm={beatGrid.bpm}

@@ -6,6 +6,10 @@ interface InspectorProps {
     tracks: TimelineTrack[];
     clips: SourceClip[];
     onUpdateSegment: (id: string, updates: Partial<ClipSegment>) => void;
+    onRemoveSegment: (id: string) => void;
+    swapMode: boolean;
+    swapSourceId: string | null;
+    onToggleSwapMode: (id: string) => void;
     introSkipFrames: number;
     onUpdateIntroSkipFrames: (frames: number) => void;
     bpm: number;
@@ -19,6 +23,10 @@ const Inspector: React.FC<InspectorProps> = ({
     tracks,
     clips,
     onUpdateSegment,
+    onRemoveSegment,
+    swapMode,
+    swapSourceId,
+    onToggleSwapMode,
     introSkipFrames,
     onUpdateIntroSkipFrames,
     bpm,
@@ -45,6 +53,33 @@ const Inspector: React.FC<InspectorProps> = ({
             <div className="p-4 border-b border-stone-800">
                  <h2 className="text-stone-400 text-sm font-semibold uppercase tracking-wider mb-1">Inspector</h2>
                  <h3 className="text-stone-100 font-medium truncate" title={sourceClip.name}>{sourceClip.name}</h3>
+            </div>
+            <div className="px-4 py-4 border-b border-stone-800 space-y-3">
+                {swapMode && swapSourceId === segment.id && (
+                    <div className="rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                        Swap mode active. Select another clip on the same track to swap.
+                    </div>
+                )}
+                <div className="flex items-center gap-2">
+                    <button
+                        type="button"
+                        onClick={() => onRemoveSegment(segment.id)}
+                        className="flex-1 rounded border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-red-200 hover:bg-red-500/20"
+                    >
+                        Remove
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => onToggleSwapMode(segment.id)}
+                        className={`flex-1 rounded border px-3 py-2 text-xs font-semibold uppercase tracking-wide transition ${
+                            swapMode && swapSourceId === segment.id
+                                ? 'border-amber-400 bg-amber-500/20 text-amber-100 shadow-[0_0_10px_rgba(245,158,11,0.35)]'
+                                : 'border-stone-700 bg-stone-800 text-stone-200 hover:bg-stone-700'
+                        }`}
+                    >
+                        {swapMode && swapSourceId === segment.id ? 'Swap Active' : 'Swap'}
+                    </button>
+                </div>
             </div>
 
             <div className="p-4 space-y-6">
