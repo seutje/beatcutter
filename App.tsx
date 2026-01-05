@@ -541,10 +541,17 @@ const App: React.FC = () => {
       try {
           const ffmpeg = new FFmpeg();
           ffmpegRef.current = ffmpeg;
+          const logBuffer: string[] = [];
 
           ffmpeg.on('progress', ({ progress }) => {
               if (!Number.isFinite(progress)) return;
               setExportProgress(Math.min(100, Math.round(progress * 100)));
+          });
+          ffmpeg.on('log', ({ type, message }) => {
+              logBuffer.push(`${type}: ${message}`);
+              if (logBuffer.length > 400) {
+                  logBuffer.shift();
+              }
           });
 
           await ffmpeg.load({
@@ -576,13 +583,25 @@ const App: React.FC = () => {
               const durationSec = segment.duration / 1000;
               filterParts.push(
                   `[${input.index}:v]trim=start=${startSec.toFixed(3)}:duration=${durationSec.toFixed(3)},` +
-                  `setpts=PTS-STARTPTS,scale=${targetWidth}:${targetHeight},fps=${DEFAULT_FPS}[v${idx}]`
+                  `setpts=PTS-STARTPTS,scale=${targetWidth}:${targetHeight}:flags=fast_bilinear[v${idx}]`
               );
               concatInputs.push(`[v${idx}]`);
           });
+          if (concatInputs.length === 0) {
+              setExportError('No valid video segments to export. Check that clips still exist.');
+              return;
+          }
 
-          const filterComplex = `${filterParts.join(';')};${concatInputs.join('')}concat=n=${concatInputs.length}:v=1:a=0[outv]`;
+          const outputDurationSec = sortedSegments.reduce((max, segment) => {
+              const end = (segment.timelineStart + segment.duration) / 1000;
+              return Math.max(max, end);
+          }, 0);
+          const audioFilter = audioInputIndex !== null && outputDurationSec > 0
+              ? `;[${audioInputIndex}:a]apad,atrim=0:${outputDurationSec.toFixed(3)},asetpts=PTS-STARTPTS[outa]`
+              : '';
+          const filterComplex = `${filterParts.join(';')};${concatInputs.join('')}concat=n=${concatInputs.length}:v=1:a=0[outv]${audioFilter}`;
           const args: string[] = [];
+          args.push('-loglevel', 'info');
           inputMap.forEach((input) => {
               args.push('-i', input.name);
           });
@@ -590,20 +609,31 @@ const App: React.FC = () => {
               '-filter_complex', filterComplex,
               '-map', '[outv]'
           );
-          if (audioInputIndex !== null) {
-              args.push('-map', `${audioInputIndex}:a`, '-shortest');
+          if (audioInputIndex !== null && outputDurationSec > 0) {
+              args.push('-map', '[outa]');
           }
           const safeMbps = Number.isFinite(exportMbps) && exportMbps > 0 ? exportMbps : 8;
           args.push(
               '-c:v', 'libx264',
-              '-preset', 'veryfast',
+              '-preset', 'ultrafast',
+              '-bf', '0',
+              '-vsync', 'cfr',
               '-r', `${DEFAULT_FPS}`,
               '-b:v', `${Math.max(1, safeMbps).toFixed(0)}M`,
+              '-pix_fmt', 'yuv420p',
+              '-profile:v', 'high',
+              '-level:v', '5.1',
               '-c:a', 'aac',
+              '-movflags', '+faststart',
               outputFile
           );
 
-          await ffmpeg.exec(args);
+          const execResult = await ffmpeg.exec(args);
+          if (execResult !== 0) {
+              console.error('FFmpeg export failed', execResult, { args }, logBuffer);
+              setExportError(`Export failed (ffmpeg code ${execResult}). Check console logs for details.`);
+              return;
+          }
           setExportProgress(100);
           const data = await ffmpeg.readFile(outputFile);
           const blob = new Blob([data instanceof Uint8Array ? data : new Uint8Array(data as ArrayBuffer)], { type: 'video/mp4' });
@@ -843,7 +873,7 @@ const App: React.FC = () => {
                   >
                     <option value="1280x720">720p (1280x720)</option>
                     <option value="1920x1080">1080p (1920x1080)</option>
-                    <option value="3840x2160">4K (3840x2160)</option>
+                    <option value="3840x2160" disabled>4K (3840x2160) — unavailable</option>
                   </select>
                 </div>
                 <div>
