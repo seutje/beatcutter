@@ -57,6 +57,26 @@ const App: React.FC = () => {
 
   // --- Handlers ---
 
+  const encodePathForUrl = (filePath: string) => {
+      const normalized = filePath.replace(/\\/g, '/');
+      if (/^[A-Za-z]:\//.test(normalized)) {
+          const drive = normalized.slice(0, 2);
+          const rest = normalized.slice(2);
+          const encodedRest = rest
+              .split('/')
+              .map(segment => encodeURIComponent(segment))
+              .join('/');
+          return `${drive}${encodedRest}`;
+      }
+      const leadingSlash = normalized.startsWith('/') ? '/' : '';
+      const trimmed = normalized.startsWith('/') ? normalized.slice(1) : normalized;
+      const encoded = trimmed
+          .split('/')
+          .map(segment => encodeURIComponent(segment))
+          .join('/');
+      return `${leadingSlash}${encoded}`;
+  };
+
   const toFileUrl = (filePath: string) => {
       if (
           filePath.startsWith('file://') ||
@@ -67,16 +87,16 @@ const App: React.FC = () => {
           return filePath;
       }
       if (window.electronAPI) {
-          const normalized = filePath.replace(/\\/g, '/');
-          if (/^[A-Za-z]:\//.test(normalized)) {
-              return `media:///${encodeURI(normalized)}`;
+          const encoded = encodePathForUrl(filePath);
+          if (/^[A-Za-z]:\//.test(encoded)) {
+              return `media:///${encoded}`;
           }
-          const withLeadingSlash = normalized.startsWith('/') ? normalized : `/${normalized}`;
-          return `media://${encodeURI(withLeadingSlash)}`;
+          const withLeadingSlash = encoded.startsWith('/') ? encoded : `/${encoded}`;
+          return `media://${withLeadingSlash}`;
       }
-      const normalized = filePath.replace(/\\/g, '/');
-      const prefix = normalized.startsWith('/') ? 'file://' : 'file:///';
-      return `${prefix}${encodeURI(normalized)}`;
+      const encoded = encodePathForUrl(filePath);
+      const prefix = encoded.startsWith('/') ? 'file://' : 'file:///';
+      return `${prefix}${encoded}`;
   };
 
   const getBaseName = (filePath: string) => filePath.split(/[\\/]/).pop() || 'Untitled';
