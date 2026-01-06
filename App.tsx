@@ -116,6 +116,35 @@ const App: React.FC = () => {
       return `${prefix}${encoded}`;
   };
 
+  const getMediaDuration = async (urls: string[], kind: 'audio' | 'video') => {
+      for (const url of urls) {
+          const duration = await new Promise<number>((resolve) => {
+              const el = document.createElement(kind);
+              el.preload = 'metadata';
+              el.onloadedmetadata = () => resolve(el.duration * 1000);
+              el.onerror = () => resolve(0);
+              el.src = url;
+          });
+          if (duration > 0) return duration;
+      }
+      return 0;
+  };
+
+  const decodeAudioWithFallback = async (urls: string[]) => {
+      let lastError: unknown = null;
+      for (const url of urls) {
+          try {
+              return await decodeAudio(url);
+          } catch (error) {
+              lastError = error;
+          }
+      }
+      if (lastError) {
+          throw lastError;
+      }
+      throw new Error('Unable to decode audio.');
+  };
+
   const getBaseName = (filePath: string) => filePath.split(/[\\/]/).pop() || 'Untitled';
 
   const getExtension = (filePath: string, fallbackName?: string) => {
@@ -185,20 +214,15 @@ const App: React.FC = () => {
         const isAudio = isAudioPath(filePath, nameOverride);
         const fileUrl = toFileUrl(filePath);
         const objectUrl = toPlaybackUrl(filePath);
+        const urlCandidates = Array.from(new Set([objectUrl, fileUrl]));
         let duration = 0;
 
         try {
             if (isAudio) {
-               duration = await new Promise<number>((resolve) => {
-                   const audio = document.createElement('audio');
-                   audio.preload = 'metadata';
-                   audio.onloadedmetadata = () => resolve(audio.duration * 1000);
-                   audio.onerror = () => resolve(0);
-                   audio.src = objectUrl;
-               });
+               duration = await getMediaDuration(urlCandidates, 'audio');
 
                if (!masterAudioBufferRef.current && duration > 0) {
-                 const buffer = await decodeAudio(fileUrl);
+                 const buffer = await decodeAudioWithFallback(urlCandidates);
                  masterAudioBufferRef.current = buffer;
                  const analysis = analyzeBeats(buffer);
                  setBeatGrid(analysis);
@@ -221,13 +245,7 @@ const App: React.FC = () => {
                  ));
                }
             } else {
-               duration = await new Promise<number>((resolve) => {
-                   const video = document.createElement('video');
-                   video.preload = 'metadata';
-                   video.onloadedmetadata = () => resolve(video.duration * 1000);
-                   video.onerror = () => resolve(0);
-                   video.src = objectUrl;
-               });
+               duration = await getMediaDuration(urlCandidates, 'video');
             }
         } catch (e) {
             console.error("Error loading metadata for", filePath, e);
