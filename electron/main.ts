@@ -99,7 +99,7 @@ app.whenReady().then(() => {
           }
         );
 
-        const payload = await response.json().catch(() => null);
+        const payload: any = await response.json().catch(() => null);
         if (!response.ok) {
           return {
             ok: false,
