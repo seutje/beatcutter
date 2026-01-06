@@ -543,29 +543,44 @@ const App: React.FC = () => {
           ].join(' ');
 
           const model = import.meta.env.VITE_GEMINI_MODEL || 'gemini-3-flash-preview';
-          const response = await fetch(
-              `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-              {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                      contents: [{
-                          role: 'user',
-                          parts: [
-                              { text: prompt },
-                              { inline_data: { mime_type: mimeType, data: base64Data } }
-                          ]
-                      }],
-                      generationConfig: { temperature: 0.2 }
-                  })
+          let payload: any;
+          if (window.electronAPI?.geminiAnalyze) {
+              const result = await window.electronAPI.geminiAnalyze({
+                  apiKey,
+                  model,
+                  prompt,
+                  mimeType,
+                  base64Data
+              });
+              if (!result.ok) {
+                  throw new Error(result.error || `Gemini request failed (${result.status})`);
               }
-          );
+              payload = result.payload;
+          } else {
+              const response = await fetch(
+                  `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+                  {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                          contents: [{
+                              role: 'user',
+                              parts: [
+                                  { text: prompt },
+                                  { inline_data: { mime_type: mimeType, data: base64Data } }
+                              ]
+                          }],
+                          generationConfig: { temperature: 0.2 }
+                      })
+                  }
+              );
 
-          if (!response.ok) {
-              throw new Error(`Gemini request failed (${response.status})`);
+              if (!response.ok) {
+                  throw new Error(`Gemini request failed (${response.status})`);
+              }
+
+              payload = await response.json();
           }
-
-          const payload = await response.json();
           const text = payload?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
           const parsed = extractJsonFromText(text);
           if (!parsed) {

@@ -15,12 +15,28 @@ type AppVersions = {
   node: string;
 };
 
+type GeminiAnalyzeRequest = {
+  apiKey: string;
+  model: string;
+  prompt: string;
+  mimeType: string;
+  base64Data: string;
+};
+
+type GeminiAnalyzeResponse = {
+  ok: boolean;
+  status: number;
+  payload?: unknown;
+  error?: string;
+};
+
 declare global {
   interface Window {
     electronAPI?: {
       ping: () => Promise<string>;
       getVersions: () => Promise<AppVersions>;
       selectFiles: () => Promise<string[]>;
+      geminiAnalyze: (request: GeminiAnalyzeRequest) => Promise<GeminiAnalyzeResponse>;
       ffmpeg: {
         run: (request: FfmpegRunRequest) => Promise<FfmpegRunResult>;
         cancel: (jobId: string) => void;

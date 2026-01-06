@@ -51,10 +51,27 @@ type ProxyProgress = {
   line: string;
 };
 
+type GeminiAnalyzeRequest = {
+  apiKey: string;
+  model: string;
+  prompt: string;
+  mimeType: string;
+  base64Data: string;
+};
+
+type GeminiAnalyzeResponse = {
+  ok: boolean;
+  status: number;
+  payload?: unknown;
+  error?: string;
+};
+
 const api = {
   ping: () => ipcRenderer.invoke("app:ping") as Promise<string>,
   getVersions: () => ipcRenderer.invoke("app:getVersions") as Promise<AppVersions>,
   selectFiles: () => ipcRenderer.invoke("dialog:openFiles") as Promise<string[]>,
+  geminiAnalyze: (request: GeminiAnalyzeRequest) =>
+    ipcRenderer.invoke("gemini:analyze", request) as Promise<GeminiAnalyzeResponse>,
   ffmpeg: {
     run: (request: FfmpegRunRequest) =>
       ipcRenderer.invoke("ffmpeg:run", request) as Promise<FfmpegRunResult>,
