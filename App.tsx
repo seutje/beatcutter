@@ -1,12 +1,8 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { FFmpeg } from '@ffmpeg/ffmpeg';
-import { fetchFile } from '@ffmpeg/util';
-import coreURL from '@ffmpeg/core?url';
-import wasmURL from '@ffmpeg/core/wasm?url';
-import workerURL from '@ffmpeg/ffmpeg/worker?url';
 import { Project, SourceClip, TimelineTrack, BeatGrid, PlaybackState, ClipSegment } from './types';
 import { decodeAudio, analyzeBeats, buildBeatGrid, generateWaveform } from './services/audioUtils';
+import { runFfmpeg, onFfmpegProgress } from './services/ffmpegBridge';
 import { autoSyncClips } from './services/syncEngine';
 import { DEFAULT_ZOOM, DEFAULT_FPS, BEATS_PER_BAR } from './constants';
 import Header from './components/Header';
@@ -55,13 +51,25 @@ const App: React.FC = () => {
   const masterAudioBufferRef = useRef<AudioBuffer | null>(null);
   const startTimeRef = useRef<number>(0);
   const animationFrameRef = useRef<number>(0);
-  const ffmpegRef = useRef<FFmpeg | null>(null);
 
   // --- Handlers ---
 
   const toFileUrl = (filePath: string) => {
-      if (filePath.startsWith('file://') || filePath.startsWith('blob:') || filePath.startsWith('data:')) {
+      if (
+          filePath.startsWith('file://') ||
+          filePath.startsWith('media://') ||
+          filePath.startsWith('blob:') ||
+          filePath.startsWith('data:')
+      ) {
           return filePath;
+      }
+      if (window.electronAPI) {
+          const normalized = filePath.replace(/\\/g, '/');
+          if (/^[A-Za-z]:\//.test(normalized)) {
+              return `media:///${encodeURI(normalized)}`;
+          }
+          const withLeadingSlash = normalized.startsWith('/') ? normalized : `/${normalized}`;
+          return `media://${encodeURI(withLeadingSlash)}`;
       }
       const normalized = filePath.replace(/\\/g, '/');
       const prefix = normalized.startsWith('/') ? 'file://' : 'file:///';
@@ -74,6 +82,23 @@ const App: React.FC = () => {
       const base = filePath.startsWith('blob:') && fallbackName ? fallbackName : getBaseName(filePath);
       const idx = base.lastIndexOf('.');
       return idx >= 0 ? base.slice(idx + 1).toLowerCase() : '';
+  };
+
+  const getPathSeparator = (filePath: string) => (filePath.includes('\\') ? '\\' : '/');
+
+  const getDirName = (filePath: string) => {
+      const sep = getPathSeparator(filePath);
+      const idx = filePath.lastIndexOf(sep);
+      if (idx === 0) return sep;
+      if (idx < 0) return '.';
+      return filePath.slice(0, idx);
+  };
+
+  const joinPath = (dir: string, fileName: string) => {
+      const sep = getPathSeparator(dir);
+      if (dir === sep) return `${sep}${fileName}`;
+      if (dir.endsWith(sep)) return `${dir}${fileName}`;
+      return `${dir}${sep}${fileName}`;
   };
 
   const isAudioPath = (filePath: string, fallbackName?: string) => {
@@ -666,11 +691,15 @@ const App: React.FC = () => {
       handleUpdateBpm(nextBpm);
   }, [handleUpdateBpm]);
 
-  // --- Export Logic (FFmpeg WASM) ---
+  // --- Export Logic (Native FFmpeg) ---
   const handleExport = async () => {
       const videoSegments = tracks.find(t => t.type === 'video')?.segments || [];
       if (videoSegments.length === 0) {
           setExportError('Nothing to export yet. Add video clips to the timeline.');
+          return;
+      }
+      if (!window.electronAPI?.ffmpeg?.run) {
+          setExportError('Export is only available in the Electron app.');
           return;
       }
       const audioSegment = tracks.find(t => t.type === 'audio')?.segments[0] || null;
@@ -681,62 +710,36 @@ const App: React.FC = () => {
       setExportError(null);
 
       const [targetWidth, targetHeight] = exportResolution.split('x').map(Number);
-      const outputFile = 'beatcutter-export.mp4';
-      const fsInputs: string[] = [];
+      const outputFileName = `beatcutter-export-${Date.now()}.mp4`;
       const inputMap = new Map<string, { index: number; name: string }>();
       let inputIndex = 0;
 
-      const buildSafeName = (clip: SourceClip) => {
-          const base = clip.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-          return `${clip.id}_${base || 'clip'}`;
-      };
-
-      const writeClipToFs = async (clip: SourceClip) => {
-          const name = buildSafeName(clip);
-          if (inputMap.has(clip.id)) return inputMap.get(clip.id)!;
-          const data = await fetchFile(toFileUrl(clip.filePath));
-          await ffmpegRef.current!.writeFile(name, data);
-          const mapped = { index: inputIndex++, name };
-          inputMap.set(clip.id, mapped);
-          fsInputs.push(name);
-          return mapped;
-      };
-
       let didSucceed = false;
+      let unsubscribeProgress: (() => void) | null = null;
+      const jobId = uuidv4();
       try {
-          const ffmpeg = new FFmpeg();
-          ffmpegRef.current = ffmpeg;
-          const logBuffer: string[] = [];
-
-          ffmpeg.on('progress', ({ progress }) => {
-              if (!Number.isFinite(progress)) return;
-              setExportProgress(Math.min(100, Math.round(progress * 100)));
-          });
-          ffmpeg.on('log', ({ type, message }) => {
-              logBuffer.push(`${type}: ${message}`);
-              if (logBuffer.length > 400) {
-                  logBuffer.shift();
-              }
-          });
-
-          await ffmpeg.load({
-              coreURL,
-              wasmURL,
-              workerURL,
-          });
-
           const sortedSegments = [...videoSegments].sort((a, b) => a.timelineStart - b.timelineStart);
           for (const segment of sortedSegments) {
               const clip = clips.find(c => c.id === segment.sourceClipId);
               if (clip) {
-                  await writeClipToFs(clip);
+                  if (clip.filePath.startsWith('blob:') || clip.filePath.startsWith('data:')) {
+                      throw new Error('Export requires file paths. Re-import clips in the Electron app.');
+                  }
+                  if (!inputMap.has(clip.id)) {
+                      inputMap.set(clip.id, { index: inputIndex++, name: clip.filePath });
+                  }
               }
           }
 
           let audioInputIndex: number | null = null;
           if (audioClip) {
-              const audioInput = await writeClipToFs(audioClip);
-              audioInputIndex = audioInput.index;
+              if (audioClip.filePath.startsWith('blob:') || audioClip.filePath.startsWith('data:')) {
+                  throw new Error('Export requires file paths. Re-import clips in the Electron app.');
+              }
+              if (!inputMap.has(audioClip.id)) {
+                  inputMap.set(audioClip.id, { index: inputIndex++, name: audioClip.filePath });
+              }
+              audioInputIndex = inputMap.get(audioClip.id)?.index ?? null;
           }
 
           const filterParts: string[] = [];
@@ -757,6 +760,15 @@ const App: React.FC = () => {
               return;
           }
 
+          const firstClipId = sortedSegments.find(segment => inputMap.has(segment.sourceClipId))?.sourceClipId;
+          const firstClipPath = firstClipId ? inputMap.get(firstClipId)?.name ?? '' : '';
+          if (!firstClipPath) {
+              setExportError('Unable to resolve output folder for export.');
+              return;
+          }
+          const outputDir = getDirName(firstClipPath);
+          const outputPath = joinPath(outputDir, outputFileName);
+
           const outputDurationSec = sortedSegments.reduce((max, segment) => {
               const end = (segment.timelineStart + segment.duration) / 1000;
               return Math.max(max, end);
@@ -767,6 +779,7 @@ const App: React.FC = () => {
           const filterComplex = `${filterParts.join(';')};${concatInputs.join('')}concat=n=${concatInputs.length}:v=1:a=0[outv]${audioFilter}`;
           const args: string[] = [];
           args.push('-loglevel', 'info');
+          args.push('-y');
           inputMap.forEach((input) => {
               args.push('-i', input.name);
           });
@@ -790,39 +803,31 @@ const App: React.FC = () => {
               '-level:v', '5.1',
               '-c:a', 'aac',
               '-movflags', '+faststart',
-              outputFile
+              outputPath
           );
 
-          const execResult = await ffmpeg.exec(args);
-          if (execResult !== 0) {
-              console.error('FFmpeg export failed', execResult, { args }, logBuffer);
-              setExportError(`Export failed (ffmpeg code ${execResult}). Check console logs for details.`);
+          unsubscribeProgress = onFfmpegProgress((progress) => {
+              if (progress.jobId !== jobId) return;
+              if (!Number.isFinite(progress.progress)) return;
+              setExportProgress(Math.min(100, Math.round(progress.progress)));
+          });
+
+          const execResult = await runFfmpeg({ jobId, args, durationSec: outputDurationSec });
+          if (execResult.exitCode !== 0) {
+              console.error('FFmpeg export failed', execResult, { args });
+              setExportError(`Export failed (ffmpeg code ${execResult.exitCode ?? 'unknown'}). Check console logs for details.`);
               return;
           }
           setExportProgress(100);
-          const data = await ffmpeg.readFile(outputFile);
-          const blob = new Blob([data instanceof Uint8Array ? data : new Uint8Array(data as ArrayBuffer)], { type: 'video/mp4' });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = outputFile;
-          a.click();
-          setTimeout(() => URL.revokeObjectURL(url), 1000);
           didSucceed = true;
       } catch (error) {
           console.error('Export failed', error);
-          setExportError('Export failed. Check the console for details.');
+          const message = error instanceof Error ? error.message : 'Export failed. Check the console for details.';
+          setExportError(message);
       } finally {
-          try {
-              if (ffmpegRef.current) {
-                  const filesToDelete = [...fsInputs, outputFile];
-                  await Promise.all(filesToDelete.map(file => ffmpegRef.current!.deleteFile(file).catch(() => undefined)));
-                  await ffmpegRef.current.terminate();
-              }
-          } catch (cleanupError) {
-              console.warn('FFmpeg cleanup failed', cleanupError);
+          if (unsubscribeProgress) {
+              unsubscribeProgress();
           }
-          ffmpegRef.current = null;
           setExporting(false);
           if (didSucceed) {
               setExportOpen(false);

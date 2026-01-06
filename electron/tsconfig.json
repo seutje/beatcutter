@@ -10,5 +10,5 @@
     "skipLibCheck": true,
     "types": ["node", "electron"]
   },
-  "include": ["main.ts", "preload.ts", "ffmpeg.ts"]
+  "include": ["main.ts", "preload.cts", "ffmpeg.ts"]
 }
