@@ -280,7 +280,7 @@ const App: React.FC = () => {
       if (useProxies && clip.proxyPath) {
           return toFileUrl(clip.proxyPath);
       }
-      return clip.objectUrl;
+      return toFileUrl(clip.filePath);
   }, [useProxies]);
 
   useEffect(() => {
