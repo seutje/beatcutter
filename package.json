@@ -9,7 +9,29 @@
     "dev:renderer": "vite --strictPort --port 5173",
     "dev:main": "tsc -p electron/tsconfig.json --watch --preserveWatchOutput",
     "build": "vite build && tsc -p electron/tsconfig.json",
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder",
     "preview": "vite preview"
+  },
+  "build": {
+    "appId": "com.beatcutter.app",
+    "productName": "Beatcutter",
+    "files": [
+      "dist/**",
+      "electron/dist/**",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "ffmpeg",
+        "to": "ffmpeg"
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    }
   },
   "dependencies": {
     "@ffmpeg/ffmpeg": "^0.12.10",
@@ -24,6 +46,7 @@
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
     "electron": "^31.0.0",
+    "electron-builder": "^24.13.3",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
   }
