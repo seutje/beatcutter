@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { registerFfmpegIpc } from "./ffmpeg.js";
@@ -38,6 +38,31 @@ app.whenReady().then(() => {
     chrome: process.versions.chrome,
     node: process.versions.node,
   }));
+  ipcMain.handle("dialog:openFiles", async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ["openFile", "multiSelections"],
+      filters: [
+        {
+          name: "Media",
+          extensions: [
+            "mp4",
+            "mov",
+            "mkv",
+            "webm",
+            "avi",
+            "mp3",
+            "wav",
+            "flac",
+            "aac",
+            "m4a",
+            "ogg",
+            "opus",
+          ],
+        },
+      ],
+    });
+    return result.canceled ? [] : result.filePaths;
+  });
   registerFfmpegIpc();
 
   void createWindow();

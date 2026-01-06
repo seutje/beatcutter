@@ -3,8 +3,12 @@ import { BeatGrid } from '../types';
 /**
  * Decodes an audio file and returns the AudioBuffer
  */
-export const decodeAudio = async (file: File): Promise<AudioBuffer> => {
-  const arrayBuffer = await file.arrayBuffer();
+export const decodeAudio = async (fileUrl: string): Promise<AudioBuffer> => {
+  const response = await fetch(fileUrl);
+  if (!response.ok) {
+    throw new Error(`Failed to load audio (${response.status})`);
+  }
+  const arrayBuffer = await response.arrayBuffer();
   const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
   return await audioContext.decodeAudioData(arrayBuffer);
 };

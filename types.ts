@@ -2,7 +2,8 @@ export type TimeMS = number;
 
 export interface SourceClip {
   id: string;
-  fileHandle: File;
+  filePath: string;
+  proxyPath?: string;
   duration: TimeMS;
   thumbnailUrl: string;
   name: string;

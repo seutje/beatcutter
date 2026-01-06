@@ -29,6 +29,7 @@ type FfmpegProgress = {
 const api = {
   ping: () => ipcRenderer.invoke("app:ping") as Promise<string>,
   getVersions: () => ipcRenderer.invoke("app:getVersions") as Promise<AppVersions>,
+  selectFiles: () => ipcRenderer.invoke("dialog:openFiles") as Promise<string[]>,
   ffmpeg: {
     run: (request: FfmpegRunRequest) =>
       ipcRenderer.invoke("ffmpeg:run", request) as Promise<FfmpegRunResult>,

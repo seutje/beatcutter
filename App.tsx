@@ -59,22 +59,56 @@ const App: React.FC = () => {
 
   // --- Handlers ---
 
-  const handleImport = async (fileList: FileList) => {
+  const toFileUrl = (filePath: string) => {
+      if (filePath.startsWith('file://') || filePath.startsWith('blob:') || filePath.startsWith('data:')) {
+          return filePath;
+      }
+      const normalized = filePath.replace(/\\/g, '/');
+      const prefix = normalized.startsWith('/') ? 'file://' : 'file:///';
+      return `${prefix}${encodeURI(normalized)}`;
+  };
+
+  const getBaseName = (filePath: string) => filePath.split(/[\\/]/).pop() || 'Untitled';
+
+  const getExtension = (filePath: string, fallbackName?: string) => {
+      const base = filePath.startsWith('blob:') && fallbackName ? fallbackName : getBaseName(filePath);
+      const idx = base.lastIndexOf('.');
+      return idx >= 0 ? base.slice(idx + 1).toLowerCase() : '';
+  };
+
+  const isAudioPath = (filePath: string, fallbackName?: string) => {
+      const audioExtensions = new Set(['mp3', 'wav', 'flac', 'aac', 'm4a', 'ogg', 'opus']);
+      return audioExtensions.has(getExtension(filePath, fallbackName));
+  };
+
+  const getMimeType = (filePath: string, fallbackName?: string) => {
+      const ext = getExtension(filePath, fallbackName);
+      const mimeMap: Record<string, string> = {
+          mp3: 'audio/mpeg',
+          wav: 'audio/wav',
+          flac: 'audio/flac',
+          aac: 'audio/aac',
+          m4a: 'audio/mp4',
+          ogg: 'audio/ogg',
+          opus: 'audio/opus',
+          mp4: 'video/mp4',
+          mov: 'video/quicktime',
+          mkv: 'video/x-matroska',
+          webm: 'video/webm',
+          avi: 'video/x-msvideo'
+      };
+      return mimeMap[ext] || 'application/octet-stream';
+  };
+
+  const handleImport = async (fileList?: FileList) => {
     const newClips: SourceClip[] = [];
-    // Convert FileList to Array immediately to preserve references when input is reset
-    const files = Array.from(fileList);
-    
-    for (let i = 0; i < files.length; i++) {
-        const file = files[i];
+    const importClip = async (filePath: string, nameOverride?: string) => {
         const clipId = uuidv4();
-        const isAudio = file.type.startsWith('audio');
-        
-        // Create Object URL for preview
-        const objectUrl = URL.createObjectURL(file);
-        
-        // Get Duration (Basic Estimate)
+        const isAudio = isAudioPath(filePath, nameOverride);
+        const fileUrl = toFileUrl(filePath);
+        const objectUrl = fileUrl;
         let duration = 0;
-        
+
         try {
             if (isAudio) {
                duration = await new Promise<number>((resolve) => {
@@ -84,10 +118,9 @@ const App: React.FC = () => {
                    audio.onerror = () => resolve(0);
                    audio.src = objectUrl;
                });
-               
-               // If it's the first audio, analyze it!
+
                if (!masterAudioBufferRef.current && duration > 0) {
-                 const buffer = await decodeAudio(file);
+                 const buffer = await decodeAudio(fileUrl);
                  masterAudioBufferRef.current = buffer;
                  const analysis = analyzeBeats(buffer);
                  setBeatGrid(analysis);
@@ -95,22 +128,20 @@ const App: React.FC = () => {
                  const waveformPoints = Math.min(4000, Math.max(600, Math.floor(buffer.duration * 60)));
                  setWaveform(generateWaveform(buffer, waveformPoints));
                  setDuration(buffer.duration * 1000);
-                 
-                 // Add to audio track
-                 setTracks(prev => prev.map(t => 
-                    t.type === 'audio' ? { 
-                        ...t, 
-                        segments: [{ 
-                            id: uuidv4(), 
+
+                 setTracks(prev => prev.map(t =>
+                    t.type === 'audio' ? {
+                        ...t,
+                        segments: [{
+                            id: uuidv4(),
                             sourceClipId: clipId,
-                            timelineStart: 0, 
-                            duration: buffer.duration * 1000, 
-                            sourceStartOffset: 0 
-                        }] 
+                            timelineStart: 0,
+                            duration: buffer.duration * 1000,
+                            sourceStartOffset: 0
+                        }]
                     } : t
                  ));
                }
-
             } else {
                duration = await new Promise<number>((resolve) => {
                    const video = document.createElement('video');
@@ -121,18 +152,35 @@ const App: React.FC = () => {
                });
             }
         } catch (e) {
-            console.error("Error loading metadata for", file.name, e);
+            console.error("Error loading metadata for", filePath, e);
         }
 
         newClips.push({
             id: clipId,
-            fileHandle: file,
+            filePath,
             duration: duration || 1000,
-            thumbnailUrl: '', // Could generate using canvas
-            name: file.name,
+            thumbnailUrl: '',
+            name: nameOverride ?? getBaseName(filePath),
             type: isAudio ? 'audio' : 'video',
             objectUrl
         });
+    };
+
+    if (fileList) {
+        const files = Array.from(fileList);
+        for (const file of files) {
+            const objectUrl = URL.createObjectURL(file);
+            await importClip(objectUrl, file.name);
+        }
+    } else if (window.electronAPI?.selectFiles) {
+        const filePaths = await window.electronAPI.selectFiles();
+        if (filePaths.length === 0) return;
+        for (const filePath of filePaths) {
+            await importClip(filePath);
+        }
+    } else {
+        console.warn('File selection is only available in the Electron app.');
+        return;
     }
 
     setClips(prev => [...prev, ...newClips]);
@@ -279,12 +327,19 @@ const App: React.FC = () => {
       setExportError(null);
   };
 
-  const readFileAsDataUrl = (file: File): Promise<string> => new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = () => reject(reader.error);
-      reader.readAsDataURL(file);
-  });
+  const readFileAsDataUrl = async (filePath: string): Promise<string> => {
+      const response = await fetch(toFileUrl(filePath));
+      if (!response.ok) {
+          throw new Error(`Failed to read file (${response.status})`);
+      }
+      const blob = await response.blob();
+      return await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = () => reject(reader.error);
+          reader.readAsDataURL(blob);
+      });
+  };
 
   const extractJsonFromText = (text: string) => {
       const start = text.indexOf('{');
@@ -314,9 +369,9 @@ const App: React.FC = () => {
       setAutoSyncError(null);
 
       try {
-          const dataUrl = await readFileAsDataUrl(audioClip.fileHandle);
+          const dataUrl = await readFileAsDataUrl(audioClip.filePath);
           const base64Data = dataUrl.split(',')[1];
-          const mimeType = audioClip.fileHandle.type || 'audio/mpeg';
+          const mimeType = getMimeType(audioClip.filePath, audioClip.name);
           const videoClips = clips.filter(c => c.type === 'video');
           const clipDurationsSec = videoClips.map(c => c.duration / 1000);
           const shortestClipSec = clipDurationsSec.length > 0 ? Math.min(...clipDurationsSec) : 0;
@@ -639,7 +694,7 @@ const App: React.FC = () => {
       const writeClipToFs = async (clip: SourceClip) => {
           const name = buildSafeName(clip);
           if (inputMap.has(clip.id)) return inputMap.get(clip.id)!;
-          const data = await fetchFile(clip.fileHandle);
+          const data = await fetchFile(toFileUrl(clip.filePath));
           await ffmpegRef.current!.writeFile(name, data);
           const mapped = { index: inputIndex++, name };
           inputMap.set(clip.id, mapped);

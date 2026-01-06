@@ -4,30 +4,48 @@ import { SourceClip } from '../types';
 
 interface MediaPoolProps {
     clips: SourceClip[];
-    onImport: (files: FileList) => void;
+    onImport: (files?: FileList) => void;
     onDelete: (id: string) => void;
 }
 
 const MediaPool: React.FC<MediaPoolProps> = ({ clips, onImport, onDelete }) => {
-    
+    const fileInputRef = React.useRef<HTMLInputElement>(null);
+
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files.length > 0) {
             onImport(e.target.files);
         }
-        e.target.value = ''; // Reset
+        e.target.value = '';
     };
 
     return (
         <div className="w-[300px] bg-stone-900 border-r border-stone-800 flex flex-col h-full">
             <div className="p-4 border-b border-stone-800">
                 <h2 className="text-stone-400 text-sm font-semibold uppercase tracking-wider mb-3">Media Pool</h2>
-                <label className="flex items-center justify-center w-full h-12 border-2 border-dashed border-stone-700 rounded-lg cursor-pointer hover:border-amber-400/70 hover:bg-stone-800 transition-all">
+                <button
+                    type="button"
+                    onClick={() => {
+                        if (window.electronAPI?.selectFiles) {
+                            onImport();
+                        } else {
+                            fileInputRef.current?.click();
+                        }
+                    }}
+                    className="flex items-center justify-center w-full h-12 border-2 border-dashed border-stone-700 rounded-lg cursor-pointer hover:border-amber-400/70 hover:bg-stone-800 transition-all"
+                >
                     <div className="flex items-center gap-2 text-stone-400">
                         <Upload size={16} />
                         <span className="text-sm font-medium">Import Media</span>
                     </div>
-                    <input type="file" className="hidden" multiple accept="video/*,audio/*" onChange={handleFileChange} />
-                </label>
+                </button>
+                <input
+                    ref={fileInputRef}
+                    type="file"
+                    className="hidden"
+                    multiple
+                    accept="video/*,audio/*"
+                    onChange={handleFileChange}
+                />
             </div>
 
             <div className="flex-1 overflow-y-auto p-2 space-y-2">
