@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain } from "electron";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { registerFfmpegIpc } from "./ffmpeg";
 
 const devServerUrl = process.env.VITE_DEV_SERVER_URL;
 const isDev = Boolean(devServerUrl);
@@ -37,6 +38,7 @@ app.whenReady().then(() => {
     chrome: process.versions.chrome,
     node: process.versions.node,
   }));
+  registerFfmpegIpc();
 
   void createWindow();
 
