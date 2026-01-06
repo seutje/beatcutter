@@ -1,9 +1,10 @@
 import React, { useRef, useMemo, useEffect } from 'react';
-import { TimelineTrack, PlaybackState, BeatGrid } from '../types';
+import { TimelineTrack, PlaybackState, BeatGrid, SourceClip } from '../types';
 import { TRACK_HEIGHT, DEFAULT_ZOOM } from '../constants';
 
 interface TimelineProps {
     tracks: TimelineTrack[];
+    clips: SourceClip[];
     playbackState: PlaybackState;
     beatGrid: BeatGrid;
     waveform: number[];
@@ -16,6 +17,7 @@ interface TimelineProps {
 
 const Timeline: React.FC<TimelineProps> = ({
     tracks,
+    clips,
     playbackState,
     beatGrid,
     waveform,
@@ -30,6 +32,10 @@ const Timeline: React.FC<TimelineProps> = ({
 
     // Calculate width based on total duration
     const totalWidth = (duration / 1000) * zoom;
+    const clipNameById = useMemo(
+        () => new Map(clips.map((clip) => [clip.id, clip.name])),
+        [clips]
+    );
 
     const handleTimelineClick = (e: React.MouseEvent) => {
         if (!scrollContainerRef.current) return;
@@ -178,6 +184,7 @@ const Timeline: React.FC<TimelineProps> = ({
                         {track.segments.map((seg) => {
                             const isSelected = selectedSegmentId === seg.id;
                             const isAudioTrack = track.type === 'audio';
+                            const clipName = clipNameById.get(seg.sourceClipId) ?? 'Untitled clip';
                             const baseClass = isAudioTrack
                                 ? 'border-blue-300/70'
                                 : isSelected
@@ -199,11 +206,16 @@ const Timeline: React.FC<TimelineProps> = ({
                                     width: `${(seg.duration / 1000) * zoom}px`
                                 }}
                             >
-                                {!isAudioTrack && (
-                                    <div className="p-1 text-[10px] text-amber-100 truncate opacity-75">
-                                        {(seg.duration / 1000).toFixed(2)}s
-                                    </div>
-                                )}
+                                <div className="absolute inset-x-2 top-1 flex flex-col gap-0.5 text-[10px] font-medium leading-tight pointer-events-none">
+                                    <span className={`truncate drop-shadow ${isAudioTrack ? 'text-blue-100/90' : 'text-amber-100/90'}`}>
+                                        {clipName}
+                                    </span>
+                                    {!isAudioTrack && (
+                                        <span className="text-[9px] text-amber-200/70">
+                                            {(seg.duration / 1000).toFixed(2)}s
+                                        </span>
+                                    )}
+                                </div>
                             </div>
                         )})}
                     </div>

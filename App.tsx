@@ -808,6 +808,7 @@ const App: React.FC = () => {
                 {/* Bottom: Timeline */}
                 <Timeline 
                     tracks={tracks} 
+                    clips={clips}
                     playbackState={playbackState} 
                     beatGrid={
                       autoSyncOpen && Number.isFinite(autoSyncBpm) && Number.isFinite(autoSyncIntroSkipFrames)
