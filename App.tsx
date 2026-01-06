@@ -77,6 +77,23 @@ const App: React.FC = () => {
       return `${leadingSlash}${encoded}`;
   };
 
+  const toPlaybackUrl = (filePath: string) => {
+      if (
+          filePath.startsWith('file://') ||
+          filePath.startsWith('media://') ||
+          filePath.startsWith('blob:') ||
+          filePath.startsWith('data:')
+      ) {
+          return filePath;
+      }
+      if (window.electronAPI) {
+          const encoded = encodePathForUrl(filePath);
+          const prefix = encoded.startsWith('/') ? 'file://' : 'file:///';
+          return `${prefix}${encoded}`;
+      }
+      return toFileUrl(filePath);
+  };
+
   const toFileUrl = (filePath: string) => {
       if (
           filePath.startsWith('file://') ||
@@ -167,7 +184,7 @@ const App: React.FC = () => {
         const clipId = uuidv4();
         const isAudio = isAudioPath(filePath, nameOverride);
         const fileUrl = toFileUrl(filePath);
-        const objectUrl = fileUrl;
+        const objectUrl = toPlaybackUrl(filePath);
         let duration = 0;
 
         try {
@@ -298,9 +315,9 @@ const App: React.FC = () => {
 
   const resolvePreviewUrl = useCallback((clip: SourceClip) => {
       if (useProxies && clip.proxyPath) {
-          return toFileUrl(clip.proxyPath);
+          return toPlaybackUrl(clip.proxyPath);
       }
-      return toFileUrl(clip.filePath);
+      return toPlaybackUrl(clip.filePath);
   }, [useProxies]);
 
   useEffect(() => {
