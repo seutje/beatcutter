@@ -10,6 +10,9 @@ interface HeaderProps {
     onAutoSync: () => void;
     canSync: boolean;
     canOpenAutoSync: boolean;
+    useProxies: boolean;
+    canToggleProxies: boolean;
+    onToggleProxies: () => void;
     projectName: string;
 }
 
@@ -21,6 +24,9 @@ const Header: React.FC<HeaderProps> = ({
     onAutoSync,
     canSync,
     canOpenAutoSync,
+    useProxies,
+    canToggleProxies,
+    onToggleProxies,
     projectName 
 }) => {
     return (
@@ -70,6 +76,23 @@ const Header: React.FC<HeaderProps> = ({
                 <div className="text-mono text-stone-300 w-24 text-center">
                     {(playbackState.currentTime / 1000).toFixed(2)}s
                 </div>
+
+                <div className="h-8 w-px bg-stone-700/80 mx-2"></div>
+
+                <button
+                    onClick={onToggleProxies}
+                    disabled={!canToggleProxies}
+                    className={`flex items-center gap-2 px-4 py-2 rounded font-medium transition-colors ${
+                        canToggleProxies
+                            ? useProxies
+                                ? 'bg-emerald-500/20 text-emerald-100 border border-emerald-400/40 hover:bg-emerald-500/30'
+                                : 'bg-stone-800 text-stone-200 border border-stone-700 hover:bg-stone-700'
+                            : 'bg-stone-800 text-stone-500 border border-stone-700 cursor-not-allowed'
+                    }`}
+                    title={canToggleProxies ? 'Toggle proxies for preview playback' : 'Proxies available only in Electron'}
+                >
+                    {useProxies ? 'Proxies On' : 'Proxies Off'}
+                </button>
 
                 <div className="h-8 w-px bg-stone-700/80 mx-2"></div>
 

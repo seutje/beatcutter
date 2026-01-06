@@ -5,9 +5,10 @@ interface PreviewPlayerProps {
     playbackState: PlaybackState;
     videoTrack: TimelineTrack | undefined;
     clips: SourceClip[];
+    getClipUrl?: (clip: SourceClip) => string;
 }
 
-const PreviewPlayer: React.FC<PreviewPlayerProps> = ({ playbackState, videoTrack, clips }) => {
+const PreviewPlayer: React.FC<PreviewPlayerProps> = ({ playbackState, videoTrack, clips, getClipUrl }) => {
     // Dual buffer references
     const playerARef = useRef<HTMLVideoElement>(null);
     const playerBRef = useRef<HTMLVideoElement>(null);
@@ -30,12 +31,14 @@ const PreviewPlayer: React.FC<PreviewPlayerProps> = ({ playbackState, videoTrack
             if (playerARef.current) {
                 if (!playerARef.current.paused) playerARef.current.pause();
                 playerARef.current.removeAttribute('data-clip-id');
+                playerARef.current.removeAttribute('data-clip-url');
                 playerARef.current.removeAttribute('src');
                 playerARef.current.load();
             }
             if (playerBRef.current) {
                 if (!playerBRef.current.paused) playerBRef.current.pause();
                 playerBRef.current.removeAttribute('data-clip-id');
+                playerBRef.current.removeAttribute('data-clip-url');
                 playerBRef.current.removeAttribute('src');
                 playerBRef.current.load();
             }
@@ -44,6 +47,7 @@ const PreviewPlayer: React.FC<PreviewPlayerProps> = ({ playbackState, videoTrack
 
         const sourceClip = clips.find(c => c.id === currentSegment.sourceClipId);
         if (!sourceClip) return;
+        const sourceUrl = getClipUrl ? getClipUrl(sourceClip) : sourceClip.objectUrl;
 
         // Calculate the seek time within the source file.
         // If the segment duration exceeds the remaining clip duration, slow playback to fit.
@@ -57,11 +61,13 @@ const PreviewPlayer: React.FC<PreviewPlayerProps> = ({ playbackState, videoTrack
         
         if (player) {
             // Check if source changed
-            const currentSrc = player.getAttribute('data-clip-id');
+            const currentClipId = player.getAttribute('data-clip-id');
+            const currentClipUrl = player.getAttribute('data-clip-url');
             
-            if (currentSrc !== sourceClip.id) {
-                player.src = sourceClip.objectUrl;
+            if (currentClipId !== sourceClip.id || currentClipUrl !== sourceUrl) {
+                player.src = sourceUrl;
                 player.setAttribute('data-clip-id', sourceClip.id);
+                player.setAttribute('data-clip-url', sourceUrl);
                 player.load();
             }
 
@@ -102,7 +108,7 @@ const PreviewPlayer: React.FC<PreviewPlayerProps> = ({ playbackState, videoTrack
             }
         }
 
-    }, [playbackState.currentTime, playbackState.isPlaying, videoTrack, clips]);
+    }, [playbackState.currentTime, playbackState.isPlaying, videoTrack, clips, getClipUrl]);
 
 
     // Independent Render Loop

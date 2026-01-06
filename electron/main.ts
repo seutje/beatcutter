@@ -1,7 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, protocol } from "electron";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { registerFfmpegIpc } from "./ffmpeg.js";
+import { registerFfmpegIpc, registerProxyIpc } from "./ffmpeg.js";
 
 const devServerUrl = process.env.VITE_DEV_SERVER_URL;
 const isDev = Boolean(devServerUrl);
@@ -86,6 +86,7 @@ app.whenReady().then(() => {
     return result.canceled ? [] : result.filePaths;
   });
   registerFfmpegIpc();
+  registerProxyIpc();
 
   void createWindow();
 

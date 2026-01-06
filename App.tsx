@@ -1,8 +1,9 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { Project, SourceClip, TimelineTrack, BeatGrid, PlaybackState, ClipSegment } from './types';
 import { decodeAudio, analyzeBeats, buildBeatGrid, generateWaveform } from './services/audioUtils';
 import { runFfmpeg, onFfmpegProgress } from './services/ffmpegBridge';
+import { runProxy, cancelProxy } from './services/proxyManager';
 import { autoSyncClips } from './services/syncEngine';
 import { DEFAULT_ZOOM, DEFAULT_FPS, BEATS_PER_BAR } from './constants';
 import Header from './components/Header';
@@ -43,6 +44,7 @@ const App: React.FC = () => {
   const [exporting, setExporting] = useState<boolean>(false);
   const [exportProgress, setExportProgress] = useState<number>(0);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [useProxies, setUseProxies] = useState<boolean>(false);
 
   // --- Refs for Audio Engine ---
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -51,6 +53,7 @@ const App: React.FC = () => {
   const masterAudioBufferRef = useRef<AudioBuffer | null>(null);
   const startTimeRef = useRef<number>(0);
   const animationFrameRef = useRef<number>(0);
+  const proxyJobsRef = useRef<Map<string, string>>(new Map());
 
   // --- Handlers ---
 
@@ -99,6 +102,19 @@ const App: React.FC = () => {
       if (dir === sep) return `${sep}${fileName}`;
       if (dir.endsWith(sep)) return `${dir}${fileName}`;
       return `${dir}${sep}${fileName}`;
+  };
+
+  const stripExtension = (fileName: string) => {
+      const idx = fileName.lastIndexOf('.');
+      return idx > 0 ? fileName.slice(0, idx) : fileName;
+  };
+
+  const getProxyPath = (filePath: string) => {
+      const dir = getDirName(filePath);
+      const baseName = getBaseName(filePath);
+      const baseStem = stripExtension(baseName);
+      const proxyDir = joinPath(dir, 'proxies');
+      return joinPath(proxyDir, `${baseStem}.proxy.mp4`);
   };
 
   const isAudioPath = (filePath: string, fallbackName?: string) => {
@@ -209,9 +225,19 @@ const App: React.FC = () => {
     }
 
     setClips(prev => [...prev, ...newClips]);
+    if (useProxies) {
+        newClips.forEach((clip) => {
+            void startProxyGeneration(clip);
+        });
+    }
   };
 
   const handleDeleteClip = (id: string) => {
+      const jobId = proxyJobsRef.current.get(id);
+      if (jobId && window.electronAPI?.proxy?.cancel) {
+          cancelProxy(jobId);
+          proxyJobsRef.current.delete(id);
+      }
       setClips(prev => prev.filter(c => c.id !== id));
       // Remove segments from timeline that use this clip
       setTracks(prev => prev.map(t => ({
@@ -219,6 +245,52 @@ const App: React.FC = () => {
           segments: t.segments.filter(s => s.sourceClipId !== id)
       })));
   };
+
+  const startProxyGeneration = async (clip: SourceClip) => {
+      if (!window.electronAPI?.proxy?.run) return;
+      if (clip.type !== 'video') return;
+      if (clip.filePath.startsWith('blob:') || clip.filePath.startsWith('data:')) return;
+      if (clip.proxyPath) return;
+      if (proxyJobsRef.current.has(clip.id)) return;
+
+      const outputPath = getProxyPath(clip.filePath);
+      const jobId = uuidv4();
+      proxyJobsRef.current.set(clip.id, jobId);
+
+      try {
+          const execResult = await runProxy({
+              jobId,
+              inputPath: clip.filePath,
+              outputPath,
+              durationSec: clip.duration / 1000,
+          });
+          if (execResult.exitCode !== 0 || execResult.signal) {
+              console.warn('Proxy generation failed', execResult, clip.filePath);
+              return;
+          }
+          setClips(prev => prev.map(c => c.id === clip.id ? { ...c, proxyPath: outputPath } : c));
+      } catch (error) {
+          console.warn('Proxy generation error', error);
+      } finally {
+          proxyJobsRef.current.delete(clip.id);
+      }
+  };
+
+  const resolvePreviewUrl = useCallback((clip: SourceClip) => {
+      if (useProxies && clip.proxyPath) {
+          return toFileUrl(clip.proxyPath);
+      }
+      return clip.objectUrl;
+  }, [useProxies]);
+
+  useEffect(() => {
+      if (!useProxies) return;
+      clips.forEach((clip) => {
+          if (!clip.proxyPath) {
+              void startProxyGeneration(clip);
+          }
+      });
+  }, [useProxies, clips]);
 
   const handleRemoveSegment = (id: string) => {
       setTracks(prev => prev.map(t => {
@@ -859,6 +931,9 @@ const App: React.FC = () => {
             onAutoSync={openAutoSyncDialog}
             canSync={clips.some(c => c.type === 'video') && beatGrid.beats.length > 0}
             canOpenAutoSync={clips.length > 0}
+            useProxies={useProxies}
+            canToggleProxies={Boolean(window.electronAPI?.proxy?.run)}
+            onToggleProxies={() => setUseProxies(prev => !prev)}
             projectName="My Beat Video"
         />
 
@@ -874,6 +949,7 @@ const App: React.FC = () => {
                             playbackState={playbackState} 
                             videoTrack={tracks.find(t => t.type === 'video')}
                             clips={clips}
+                            getClipUrl={resolvePreviewUrl}
                         />
                     </div>
                 </div>

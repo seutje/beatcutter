@@ -26,6 +26,31 @@ type FfmpegProgress = {
   line: string;
 };
 
+type ProxyRunRequest = {
+  jobId?: string;
+  inputPath: string;
+  outputPath: string;
+  maxWidth?: number;
+  maxHeight?: number;
+  crf?: number;
+  preset?: string;
+  withAudio?: boolean;
+  durationSec?: number;
+};
+
+type ProxyRunResult = {
+  jobId: string;
+  exitCode: number | null;
+  signal: NodeJS.Signals | null;
+};
+
+type ProxyProgress = {
+  jobId: string;
+  timeSec: number;
+  progress?: number;
+  line: string;
+};
+
 const api = {
   ping: () => ipcRenderer.invoke("app:ping") as Promise<string>,
   getVersions: () => ipcRenderer.invoke("app:getVersions") as Promise<AppVersions>,
@@ -40,6 +65,19 @@ const api = {
       ipcRenderer.on("ffmpeg:progress", listener);
       return () => {
         ipcRenderer.removeListener("ffmpeg:progress", listener);
+      };
+    },
+  },
+  proxy: {
+    run: (request: ProxyRunRequest) =>
+      ipcRenderer.invoke("proxy:run", request) as Promise<ProxyRunResult>,
+    cancel: (jobId: string) => ipcRenderer.send("proxy:cancel", jobId),
+    onProgress: (callback: (progress: ProxyProgress) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, progress: ProxyProgress) =>
+        callback(progress);
+      ipcRenderer.on("proxy:progress", listener);
+      return () => {
+        ipcRenderer.removeListener("proxy:progress", listener);
       };
     },
   },

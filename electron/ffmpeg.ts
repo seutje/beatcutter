@@ -1,8 +1,8 @@
 import { app, ipcMain, type WebContents } from "electron";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { chmodSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { chmodSync, existsSync, mkdirSync } from "node:fs";
+import { dirname, join } from "node:path";
 
 type FfmpegRunRequest = {
   jobId?: string;
@@ -17,11 +17,24 @@ type FfmpegRunResult = {
   signal: NodeJS.Signals | null;
 };
 
+type ProxyRunRequest = {
+  jobId?: string;
+  inputPath: string;
+  outputPath: string;
+  maxWidth?: number;
+  maxHeight?: number;
+  crf?: number;
+  preset?: string;
+  withAudio?: boolean;
+  durationSec?: number;
+};
+
 type ActiveJob = {
   child: ChildProcessWithoutNullStreams;
   sender: WebContents;
   durationSec?: number;
   buffer: string;
+  progressChannel: string;
 };
 
 const activeJobs = new Map<string, ActiveJob>();
@@ -75,8 +88,9 @@ const emitProgress = (
     progress?: number;
     line: string;
   },
+  channel: string,
 ) => {
-  sender.send("ffmpeg:progress", payload);
+  sender.send(channel, payload);
 };
 
 const attachProgressListeners = (jobId: string, job: ActiveJob) => {
@@ -96,12 +110,16 @@ const attachProgressListeners = (jobId: string, job: ActiveJob) => {
           ? Math.min(100, Math.max(0, (timeSec / job.durationSec) * 100))
           : undefined;
 
-      emitProgress(job.sender, { jobId, timeSec, progress, line });
+      emitProgress(job.sender, { jobId, timeSec, progress, line }, job.progressChannel);
     }
   });
 };
 
-const startFfmpeg = (sender: WebContents, request: FfmpegRunRequest): Promise<FfmpegRunResult> => {
+const startFfmpeg = (
+  sender: WebContents,
+  request: FfmpegRunRequest,
+  progressChannel = "ffmpeg:progress",
+): Promise<FfmpegRunResult> => {
   const jobId = request.jobId ?? randomUUID();
 
   if (activeJobs.has(jobId)) {
@@ -119,6 +137,7 @@ const startFfmpeg = (sender: WebContents, request: FfmpegRunRequest): Promise<Ff
     sender,
     durationSec: request.durationSec,
     buffer: "",
+    progressChannel,
   };
 
   activeJobs.set(jobId, job);
@@ -137,15 +156,74 @@ const startFfmpeg = (sender: WebContents, request: FfmpegRunRequest): Promise<Ff
   });
 };
 
+const buildProxyArgs = (request: ProxyRunRequest): string[] => {
+  const maxWidth = Number.isFinite(request.maxWidth) ? Math.max(1, request.maxWidth!) : 1280;
+  const maxHeight = Number.isFinite(request.maxHeight) ? Math.max(1, request.maxHeight!) : 720;
+  const crf = Number.isFinite(request.crf) ? Math.min(51, Math.max(0, request.crf!)) : 28;
+  const preset = request.preset ?? "veryfast";
+  const withAudio = Boolean(request.withAudio);
+
+  return [
+    "-loglevel",
+    "info",
+    "-y",
+    "-i",
+    request.inputPath,
+    "-vf",
+    `scale=${maxWidth}:${maxHeight}:force_original_aspect_ratio=decrease`,
+    "-c:v",
+    "libx264",
+    "-preset",
+    preset,
+    "-crf",
+    `${crf}`,
+    "-pix_fmt",
+    "yuv420p",
+    ...(withAudio ? ["-c:a", "aac", "-b:a", "128k"] : ["-an"]),
+    "-movflags",
+    "+faststart",
+    request.outputPath,
+  ];
+};
+
+const startProxy = (sender: WebContents, request: ProxyRunRequest): Promise<FfmpegRunResult> => {
+  const outputDir = dirname(request.outputPath);
+  mkdirSync(outputDir, { recursive: true });
+  const args = buildProxyArgs(request);
+  return startFfmpeg(
+    sender,
+    {
+      jobId: request.jobId,
+      args,
+      durationSec: request.durationSec,
+    },
+    "proxy:progress",
+  );
+};
+
+const cancelJob = (jobId: string) => {
+  const job = activeJobs.get(jobId);
+  if (!job) return;
+
+  job.child.kill("SIGTERM");
+};
+
 export const registerFfmpegIpc = () => {
   ipcMain.handle("ffmpeg:run", async (event, request: FfmpegRunRequest) =>
-    startFfmpeg(event.sender, request),
+    startFfmpeg(event.sender, request, "ffmpeg:progress"),
   );
 
   ipcMain.on("ffmpeg:cancel", (_event, jobId: string) => {
-    const job = activeJobs.get(jobId);
-    if (!job) return;
+    cancelJob(jobId);
+  });
+};
 
-    job.child.kill("SIGTERM");
+export const registerProxyIpc = () => {
+  ipcMain.handle("proxy:run", async (event, request: ProxyRunRequest) =>
+    startProxy(event.sender, request),
+  );
+
+  ipcMain.on("proxy:cancel", (_event, jobId: string) => {
+    cancelJob(jobId);
   });
 };
