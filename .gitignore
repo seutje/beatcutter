@@ -33,3 +33,5 @@ build
 *.njsproj
 *.sln
 *.sw?
+
+ffmpeg
