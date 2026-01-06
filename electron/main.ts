@@ -63,8 +63,13 @@ app.whenReady().then(() => {
     const url = new URL(request.url);
     const hostPart = url.host ? `/${url.host}` : "";
     let pathName = decodeURIComponent(`${hostPart}${url.pathname}`);
-    if (process.platform === "win32" && pathName.startsWith("/")) {
-      pathName = pathName.slice(1);
+    if (process.platform === "win32") {
+      if (pathName.startsWith("/")) {
+        pathName = pathName.slice(1);
+      }
+      if (/^[A-Za-z]\//.test(pathName)) {
+        pathName = `${pathName[0]}:${pathName.slice(1)}`;
+      }
     }
     callback({ path: pathName });
   });
