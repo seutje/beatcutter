@@ -1,7 +1,7 @@
 import { app, ipcMain, type WebContents } from "electron";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
+import { chmodSync, existsSync } from "node:fs";
 import { join } from "node:path";
 
 type FfmpegRunRequest = {
@@ -37,6 +37,16 @@ const resolveFfmpegPath = (): string => {
     throw new Error(
       `FFmpeg binary not found at ${candidate}. Place it under resources/ffmpeg or set BEATCUTTER_FFMPEG_PATH.`,
     );
+  }
+
+  if (process.platform !== "win32") {
+    try {
+      chmodSync(candidate, 0o755);
+    } catch (error) {
+      throw new Error(
+        `FFmpeg binary is not executable at ${candidate}. Run chmod +x or set BEATCUTTER_FFMPEG_PATH to an executable binary.`,
+      );
+    }
   }
 
   return candidate;
