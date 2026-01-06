@@ -45,6 +45,7 @@ const App: React.FC = () => {
   const [exportProgress, setExportProgress] = useState<number>(0);
   const [exportError, setExportError] = useState<string | null>(null);
   const [useProxies, setUseProxies] = useState<boolean>(false);
+  const [optionsOpen, setOptionsOpen] = useState<boolean>(false);
 
   // --- Refs for Audio Engine ---
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -460,6 +461,7 @@ const App: React.FC = () => {
       setAutoSyncIntroSkipFrames(introSkipFrames);
       setAutoSyncError(null);
       setAutoSyncOpen(true);
+      setOptionsOpen(false);
   };
 
   const closeAutoSyncDialog = () => {
@@ -471,6 +473,7 @@ const App: React.FC = () => {
       setExportProgress(0);
       setExportError(null);
       setExportOpen(true);
+      setOptionsOpen(false);
   };
 
   const closeExportDialog = () => {
@@ -989,6 +992,8 @@ const App: React.FC = () => {
             useProxies={useProxies}
             canToggleProxies={Boolean(window.electronAPI?.proxy?.run)}
             onToggleProxies={() => setUseProxies(prev => !prev)}
+            optionsOpen={optionsOpen}
+            onToggleOptions={() => setOptionsOpen(prev => !prev)}
             projectName="My Beat Video"
         />
 
