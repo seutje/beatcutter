@@ -1,19 +1,21 @@
 # AGENTS.md
 
 ## Project overview
-- Beatcutter is a browser-based music video editor built with React + TypeScript + Vite.
+- Beatcutter is a Windows-first desktop music video editor built with Electron, React, TypeScript, and Vite.
 - App state lives mostly in `App.tsx` and is passed into UI components.
 - Audio analysis and beat grid logic live in `services/audioUtils.ts`.
 - Auto-sync logic lives in `services/syncEngine.ts`.
 
 ## Dev workflow
 - Install: `npm install`
-- Run dev server: `npm run dev` (if running locally, the dev server is probably already running)
+- Run desktop app (Windows-first): `npm run dev`
+- The Electron entry and config live in `electron/`.
 - There are no automated tests configured in this repo.
 
 ## Code structure
 - `App.tsx`: top-level state, playback engine, and wiring of components.
 - `components/`: UI elements such as `Timeline`, `Inspector`, and `PreviewPlayer`.
+- `electron/`: Electron main process, preload, and desktop wiring.
 - `services/`: audio decoding/analysis and auto-sync algorithms.
 - `constants.ts`: shared constants like `DEFAULT_FPS`, `DEFAULT_ZOOM`, `BEATS_PER_BAR`.
 - `types.ts`: shared TypeScript interfaces.
@@ -35,3 +37,4 @@
 - Preserve existing state flow in `App.tsx`; prefer passing callbacks to components.
 - If you add new controls, wire them through `App.tsx` and keep `Inspector`/`Timeline` focused.
 - Keep changes minimal and localized to the relevant module.
+- Prioritize Windows behavior, paths, and shortcuts; ensure changes work on Windows first.
