@@ -3,9 +3,12 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "main": "electron/dist/main.js",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
+    "dev": "node scripts/dev-electron.mjs",
+    "dev:renderer": "vite --strictPort --port 5173",
+    "dev:main": "tsc -p electron/tsconfig.json --watch --preserveWatchOutput",
+    "build": "vite build && tsc -p electron/tsconfig.json",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -20,6 +23,7 @@
   "devDependencies": {
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
+    "electron": "^31.0.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
   }

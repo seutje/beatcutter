@@ -11,6 +11,17 @@ node_modules
 dist
 dist-ssr
 *.local
+electron/dist
+*.tsbuildinfo
+release
+releases
+out
+build
+*.dmg
+*.exe
+*.msi
+*.AppImage
+*.snap
 
 # Editor directories and files
 .vscode/*
