@@ -9,8 +9,9 @@
     "dev:renderer": "vite --strictPort --port 5173",
     "dev:main": "tsc -p electron/tsconfig.json --watch --preserveWatchOutput",
     "build": "vite build && tsc -p electron/tsconfig.json",
-    "pack": "npm run build && electron-builder --dir",
-    "dist": "npm run build && electron-builder",
+    "build:electron": "vite build --base=./ && tsc -p electron/tsconfig.json",
+    "pack": "npm run build:electron && electron-builder --dir",
+    "dist": "npm run build:electron && electron-builder",
     "preview": "vite preview"
   },
   "build": {
