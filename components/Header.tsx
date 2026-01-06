@@ -15,6 +15,8 @@ interface HeaderProps {
     onToggleProxies: () => void;
     optionsOpen: boolean;
     onToggleOptions: () => void;
+    geminiApiKey: string;
+    onGeminiApiKeyChange: (value: string) => void;
     projectName: string;
 }
 
@@ -31,6 +33,8 @@ const Header: React.FC<HeaderProps> = ({
     onToggleProxies,
     optionsOpen,
     onToggleOptions,
+    geminiApiKey,
+    onGeminiApiKeyChange,
     projectName 
 }) => {
     return (
@@ -112,6 +116,19 @@ const Header: React.FC<HeaderProps> = ({
                             aria-label="Options"
                         >
                             <div className="text-xs uppercase tracking-wide text-stone-500">Options</div>
+                            <label className="mt-3 block text-xs uppercase tracking-wide text-stone-500">
+                                Gemini API Key
+                                <input
+                                    type="password"
+                                    value={geminiApiKey}
+                                    onChange={(e) => onGeminiApiKeyChange(e.target.value)}
+                                    placeholder="Enter your key"
+                                    className="mt-2 w-full rounded border border-stone-700 bg-stone-800 px-3 py-2 text-sm text-stone-100 placeholder:text-stone-500 focus:border-amber-400 focus:outline-none"
+                                />
+                            </label>
+                            <p className="mt-2 text-xs text-stone-500">
+                                Stored only for this session.
+                            </p>
                             <button
                                 onClick={onToggleProxies}
                                 disabled={!canToggleProxies}

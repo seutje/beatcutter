@@ -46,6 +46,7 @@ const App: React.FC = () => {
   const [exportError, setExportError] = useState<string | null>(null);
   const [useProxies, setUseProxies] = useState<boolean>(false);
   const [optionsOpen, setOptionsOpen] = useState<boolean>(false);
+  const [geminiApiKey, setGeminiApiKey] = useState<string>('');
 
   // --- Refs for Audio Engine ---
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -514,9 +515,9 @@ const App: React.FC = () => {
           return;
       }
 
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      const apiKey = geminiApiKey.trim();
       if (!apiKey) {
-          setAutoSyncError('Missing VITE_GEMINI_API_KEY in your environment.');
+          setAutoSyncError('Add a Gemini API key in Options before running analysis.');
           return;
       }
 
@@ -994,6 +995,8 @@ const App: React.FC = () => {
             onToggleProxies={() => setUseProxies(prev => !prev)}
             optionsOpen={optionsOpen}
             onToggleOptions={() => setOptionsOpen(prev => !prev)}
+            geminiApiKey={geminiApiKey}
+            onGeminiApiKeyChange={setGeminiApiKey}
             projectName="My Beat Video"
         />
 
