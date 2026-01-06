@@ -778,11 +778,15 @@ const App: React.FC = () => {
               : '';
           const filterComplex = `${filterParts.join(';')};${concatInputs.join('')}concat=n=${concatInputs.length}:v=1:a=0[outv]${audioFilter}`;
           const args: string[] = [];
+          const is4kExport = targetWidth >= 3840 || targetHeight >= 2160;
           args.push('-loglevel', 'info');
           args.push('-y');
           inputMap.forEach((input) => {
               args.push('-i', input.name);
           });
+          if (is4kExport) {
+              args.push('-filter_complex_threads', '2');
+          }
           args.push(
               '-filter_complex', filterComplex,
               '-map', '[outv]'
@@ -791,6 +795,9 @@ const App: React.FC = () => {
               args.push('-map', '[outa]');
           }
           const safeMbps = Number.isFinite(exportMbps) && exportMbps > 0 ? exportMbps : 8;
+          if (is4kExport) {
+              args.push('-threads', '2');
+          }
           args.push(
               '-c:v', 'libx264',
               '-preset', 'ultrafast',
@@ -813,9 +820,15 @@ const App: React.FC = () => {
           });
 
           const execResult = await runFfmpeg({ jobId, args, durationSec: outputDurationSec });
-          if (execResult.exitCode !== 0) {
+          if (execResult.exitCode !== 0 || execResult.signal) {
               console.error('FFmpeg export failed', execResult, { args });
-              setExportError(`Export failed (ffmpeg code ${execResult.exitCode ?? 'unknown'}). Check console logs for details.`);
+              if (execResult.signal === 'SIGKILL') {
+                  setExportError('Export failed (SIGKILL). The OS likely ran out of memory. Try 1080p or a shorter export.');
+              } else {
+                  setExportError(
+                      `Export failed (ffmpeg code ${execResult.exitCode ?? 'unknown'}${execResult.signal ? `, signal ${execResult.signal}` : ''}). Check console logs for details.`
+                  );
+              }
               return;
           }
           setExportProgress(100);
@@ -1025,7 +1038,7 @@ const App: React.FC = () => {
               <div className="flex items-center justify-between px-5 py-4 border-b border-stone-800">
                 <div>
                   <h2 className="text-lg font-semibold text-stone-100">Export Video</h2>
-                  <p className="text-xs text-stone-400 mt-1">Render the timeline with FFmpeg WASM.</p>
+                  <p className="text-xs text-stone-400 mt-1">Render the timeline with native FFmpeg.</p>
                 </div>
                 <button
                   onClick={closeExportDialog}
@@ -1048,7 +1061,7 @@ const App: React.FC = () => {
                   >
                     <option value="1280x720">720p (1280x720)</option>
                     <option value="1920x1080">1080p (1920x1080)</option>
-                    <option value="3840x2160" disabled>4K (3840x2160) — unavailable</option>
+                    <option value="3840x2160">4K (3840x2160)</option>
                   </select>
                 </div>
                 <div>
