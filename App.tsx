@@ -5,7 +5,7 @@ import { decodeAudio, analyzeBeats, buildBeatGrid, generateWaveform } from './se
 import { runFfmpeg, onFfmpegProgress } from './services/ffmpegBridge';
 import { runProxy, cancelProxy } from './services/proxyManager';
 import { autoSyncClips } from './services/syncEngine';
-import { DEFAULT_ZOOM, DEFAULT_FPS, BEATS_PER_BAR } from './constants';
+import { DEFAULT_ZOOM, DEFAULT_FPS, BEATS_PER_BAR, TIMELINE_ZOOM_MIN, TIMELINE_ZOOM_MAX } from './constants';
 import Header from './components/Header';
 import MediaPool from './components/MediaPool';
 import Timeline from './components/Timeline';
@@ -61,9 +61,14 @@ const App: React.FC = () => {
   const defaultFadeOut = { enabled: false, startMs: -500, endMs: 0 };
 
   // --- Handlers ---
+  const clampZoom = useCallback(
+    (value: number) => Math.min(TIMELINE_ZOOM_MAX, Math.max(TIMELINE_ZOOM_MIN, value)),
+    []
+  );
+
   const handleZoomChange = useCallback((nextZoom: number) => {
-    setZoom(nextZoom);
-  }, []);
+    setZoom(clampZoom(nextZoom));
+  }, [clampZoom]);
 
   const encodePathForUrl = (filePath: string) => {
       const normalized = filePath.replace(/\\/g, '/');
@@ -302,6 +307,34 @@ const App: React.FC = () => {
         });
     }
   };
+
+  useEffect(() => {
+    const isEditableTarget = (target: EventTarget | null) => {
+      if (!(target instanceof HTMLElement)) return false;
+      const tag = target.tagName;
+      return (
+        tag === 'INPUT' ||
+        tag === 'TEXTAREA' ||
+        tag === 'SELECT' ||
+        target.isContentEditable
+      );
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!event.ctrlKey || isEditableTarget(event.target)) return;
+      if (event.key === '+' || event.key === '=') {
+        event.preventDefault();
+        setZoom((prev) => clampZoom(prev * 1.1));
+      }
+      if (event.key === '-' || event.key === '_') {
+        event.preventDefault();
+        setZoom((prev) => clampZoom(prev * 0.9));
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [clampZoom]);
 
   const handleDeleteClip = (id: string) => {
       const jobId = proxyJobsRef.current.get(id);
