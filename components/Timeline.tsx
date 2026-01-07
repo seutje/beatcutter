@@ -1,6 +1,6 @@
 import React, { useRef, useMemo, useEffect } from 'react';
 import { TimelineTrack, PlaybackState, BeatGrid, SourceClip, FadeRange } from '../types';
-import { TRACK_HEIGHT, DEFAULT_ZOOM } from '../constants';
+import { TRACK_HEIGHT, TIMELINE_ZOOM_MIN, TIMELINE_ZOOM_MAX } from '../constants';
 
 interface TimelineProps {
     tracks: TimelineTrack[];
@@ -11,6 +11,7 @@ interface TimelineProps {
     zoom: number;
     duration: number;
     onSeek: (time: number) => void;
+    onZoomChange: (zoom: number) => void;
     onSelectSegment: (id: string) => void;
     selectedSegmentId: string | null;
 }
@@ -24,6 +25,7 @@ const Timeline: React.FC<TimelineProps> = ({
     zoom,
     duration,
     onSeek,
+    onZoomChange,
     onSelectSegment,
     selectedSegmentId
 }) => {
@@ -79,6 +81,26 @@ const Timeline: React.FC<TimelineProps> = ({
         isScrubbingRef.current = true;
         updateTimeFromClientX(e.clientX);
         e.preventDefault();
+    };
+
+    const handleWheel = (e: React.WheelEvent) => {
+        if (!e.ctrlKey) return;
+        e.preventDefault();
+        const container = scrollContainerRef.current;
+        if (!container) return;
+        const rect = container.getBoundingClientRect();
+        const cursorOffsetX = e.clientX - rect.left;
+        const cursorTimeMs = ((cursorOffsetX + container.scrollLeft) / zoom) * 1000;
+        const zoomDirection = e.deltaY > 0 ? 0.9 : 1.1;
+        const nextZoom = clamp(zoom * zoomDirection, TIMELINE_ZOOM_MIN, TIMELINE_ZOOM_MAX);
+        const nextScrollLeft = (cursorTimeMs / 1000) * nextZoom - cursorOffsetX;
+        onZoomChange(nextZoom);
+        requestAnimationFrame(() => {
+            const nextContainer = scrollContainerRef.current;
+            if (!nextContainer) return;
+            const maxLeft = nextContainer.scrollWidth - nextContainer.clientWidth;
+            nextContainer.scrollLeft = Math.max(0, Math.min(maxLeft, nextScrollLeft));
+        });
     };
 
     useEffect(() => {
@@ -139,6 +161,7 @@ const Timeline: React.FC<TimelineProps> = ({
         <div
             ref={scrollContainerRef}
             className="flex-1 bg-stone-900 overflow-x-auto overflow-y-hidden relative select-none custom-scrollbar border-t border-stone-800 h-64 flex flex-col min-w-0"
+            onWheel={handleWheel}
         >
             {/* Time Ruler */}
             <div 

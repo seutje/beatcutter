@@ -61,6 +61,9 @@ const App: React.FC = () => {
   const defaultFadeOut = { enabled: false, startMs: -500, endMs: 0 };
 
   // --- Handlers ---
+  const handleZoomChange = useCallback((nextZoom: number) => {
+    setZoom(nextZoom);
+  }, []);
 
   const encodePathForUrl = (filePath: string) => {
       const normalized = filePath.replace(/\\/g, '/');
@@ -1057,6 +1060,7 @@ const App: React.FC = () => {
                     zoom={zoom}
                     duration={duration}
                     onSeek={handleSeek}
+                    onZoomChange={handleZoomChange}
                     onSelectSegment={handleSelectSegment}
                     selectedSegmentId={selectedSegmentId}
                 />
