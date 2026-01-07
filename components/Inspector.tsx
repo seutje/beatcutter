@@ -1,5 +1,5 @@
 import React from 'react';
-import { ClipSegment, SourceClip, TimelineTrack } from '../types';
+import { ClipSegment, FadeRange, SourceClip, TimelineTrack } from '../types';
 
 interface InspectorProps {
     selectedSegmentId: string | null;
@@ -36,6 +36,8 @@ const Inspector: React.FC<InspectorProps> = ({
 }) => {
     const segment = tracks.flatMap(track => track.segments).find(s => s.id === selectedSegmentId);
     const sourceClip = segment ? clips.find(c => c.id === segment.sourceClipId) : null;
+    const defaultFadeIn = { enabled: false, startMs: 0, endMs: 500 };
+    const defaultFadeOut = { enabled: false, startMs: -500, endMs: 0 };
 
     if (!segment || !sourceClip) {
         return (
@@ -47,6 +49,18 @@ const Inspector: React.FC<InspectorProps> = ({
 
     const barDurationMs = Number.isFinite(barLengthSec) ? barLengthSec * 1000 : 0;
     const durationBars = barDurationMs > 0 ? segment.duration / barDurationMs : 0;
+    const fadeIn = segment.fadeIn ?? defaultFadeIn;
+    const fadeOut = segment.fadeOut ?? defaultFadeOut;
+    const formatSec = (ms: number, fallback: number) =>
+        Number.isFinite(ms) ? Number((ms / 1000).toFixed(2)) : fallback;
+    const updateFade = (key: 'fadeIn' | 'fadeOut', updates: Partial<FadeRange>) => {
+        const current = key === 'fadeIn' ? fadeIn : fadeOut;
+        onUpdateSegment(segment.id, { [key]: { ...current, ...updates } } as Partial<ClipSegment>);
+    };
+    const updateFadeTime = (key: 'fadeIn' | 'fadeOut', field: 'startMs' | 'endMs', valueSec: number) => {
+        if (!Number.isFinite(valueSec)) return;
+        updateFade(key, { [field]: valueSec * 1000 });
+    };
 
     return (
         <div className="w-[300px] bg-stone-900 border-l border-stone-800 flex flex-col h-full overflow-y-auto">
@@ -127,6 +141,83 @@ const Inspector: React.FC<InspectorProps> = ({
                                 className="w-full bg-stone-800 border border-stone-700 rounded px-2 py-1 text-sm text-stone-200"
                             />
                          </div>
+                    </div>
+                </div>
+
+                <div>
+                    <label className="block text-xs text-stone-500 mb-2 uppercase">Fades (s)</label>
+                    <div className="space-y-3">
+                        <div className="rounded border border-stone-800 bg-stone-900/40 p-3 space-y-2">
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs font-semibold text-stone-300 uppercase tracking-wide">Fade In</span>
+                                <input
+                                    type="checkbox"
+                                    checked={fadeIn.enabled}
+                                    onChange={(e) => updateFade('fadeIn', { enabled: e.target.checked })}
+                                    className="h-4 w-4 accent-amber-500"
+                                />
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                                <label className="text-xs text-stone-400">
+                                    Start
+                                    <input
+                                        type="number"
+                                        step={0.01}
+                                        value={formatSec(fadeIn.startMs, 0)}
+                                        onChange={(e) => updateFadeTime('fadeIn', 'startMs', Number(e.target.value))}
+                                        disabled={!fadeIn.enabled}
+                                        className="mt-1 w-full bg-stone-800 border border-stone-700 rounded px-2 py-1 text-sm text-stone-200 disabled:opacity-50"
+                                    />
+                                </label>
+                                <label className="text-xs text-stone-400">
+                                    End
+                                    <input
+                                        type="number"
+                                        step={0.01}
+                                        value={formatSec(fadeIn.endMs, 0.5)}
+                                        onChange={(e) => updateFadeTime('fadeIn', 'endMs', Number(e.target.value))}
+                                        disabled={!fadeIn.enabled}
+                                        className="mt-1 w-full bg-stone-800 border border-stone-700 rounded px-2 py-1 text-sm text-stone-200 disabled:opacity-50"
+                                    />
+                                </label>
+                            </div>
+                        </div>
+
+                        <div className="rounded border border-stone-800 bg-stone-900/40 p-3 space-y-2">
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs font-semibold text-stone-300 uppercase tracking-wide">Fade Out</span>
+                                <input
+                                    type="checkbox"
+                                    checked={fadeOut.enabled}
+                                    onChange={(e) => updateFade('fadeOut', { enabled: e.target.checked })}
+                                    className="h-4 w-4 accent-amber-500"
+                                />
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                                <label className="text-xs text-stone-400">
+                                    Start
+                                    <input
+                                        type="number"
+                                        step={0.01}
+                                        value={formatSec(fadeOut.startMs, -0.5)}
+                                        onChange={(e) => updateFadeTime('fadeOut', 'startMs', Number(e.target.value))}
+                                        disabled={!fadeOut.enabled}
+                                        className="mt-1 w-full bg-stone-800 border border-stone-700 rounded px-2 py-1 text-sm text-stone-200 disabled:opacity-50"
+                                    />
+                                </label>
+                                <label className="text-xs text-stone-400">
+                                    End
+                                    <input
+                                        type="number"
+                                        step={0.01}
+                                        value={formatSec(fadeOut.endMs, 0)}
+                                        onChange={(e) => updateFadeTime('fadeOut', 'endMs', Number(e.target.value))}
+                                        disabled={!fadeOut.enabled}
+                                        className="mt-1 w-full bg-stone-800 border border-stone-700 rounded px-2 py-1 text-sm text-stone-200 disabled:opacity-50"
+                                    />
+                                </label>
+                            </div>
+                        </div>
                     </div>
                 </div>
 

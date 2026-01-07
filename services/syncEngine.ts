@@ -8,6 +8,8 @@ export const autoSyncClips = (
     totalDuration: number,
     preferredBars: number = 4
 ): ClipSegment[] => {
+    const defaultFadeIn = { enabled: false, startMs: 0, endMs: 500 };
+    const defaultFadeOut = { enabled: false, startMs: -500, endMs: 0 };
     const beatsPerBar = BEATS_PER_BAR;
     const sanitizedBars = Number.isFinite(preferredBars) ? Math.max(1, Math.round(preferredBars)) : 4;
     const fallbackBars = [4, 2, 1].filter((bars) => bars < sanitizedBars);
@@ -65,7 +67,9 @@ export const autoSyncClips = (
             sourceClipId: clip.id,
             timelineStart: startTime,
             duration: duration,
-            sourceStartOffset: sourceStartOffset
+            sourceStartOffset: sourceStartOffset,
+            fadeIn: { ...defaultFadeIn },
+            fadeOut: { ...defaultFadeOut }
         });
         segmentIndex += 1;
 

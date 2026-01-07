@@ -19,6 +19,14 @@ export interface ClipSegment {
   duration: TimeMS;
   // Source content selection (The "Slip")
   sourceStartOffset: TimeMS;
+  fadeIn?: FadeRange;
+  fadeOut?: FadeRange;
+}
+
+export interface FadeRange {
+  enabled: boolean;
+  startMs: TimeMS;
+  endMs: TimeMS;
 }
 
 export interface TimelineTrack {

@@ -56,6 +56,8 @@ const App: React.FC = () => {
   const startTimeRef = useRef<number>(0);
   const animationFrameRef = useRef<number>(0);
   const proxyJobsRef = useRef<Map<string, string>>(new Map());
+  const defaultFadeIn = { enabled: false, startMs: 0, endMs: 500 };
+  const defaultFadeOut = { enabled: false, startMs: -500, endMs: 0 };
 
   // --- Handlers ---
 
@@ -241,7 +243,9 @@ const App: React.FC = () => {
                             sourceClipId: clipId,
                             timelineStart: 0,
                             duration: buffer.duration * 1000,
-                            sourceStartOffset: 0
+                            sourceStartOffset: 0,
+                            fadeIn: { ...defaultFadeIn },
+                            fadeOut: { ...defaultFadeOut }
                         }]
                     } : t
                  ));
