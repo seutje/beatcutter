@@ -75,7 +75,7 @@ const App: React.FC = () => {
     setZoom(clampZoom(nextZoom));
   }, [clampZoom]);
 
-  const encodePathForUrl = (filePath: string) => {
+  const encodePathForUrl = useCallback((filePath: string) => {
       const normalized = filePath.replace(/\\/g, '/');
       if (/^[A-Za-z]:\//.test(normalized)) {
           const drive = normalized.slice(0, 2);
@@ -93,26 +93,9 @@ const App: React.FC = () => {
           .map(segment => encodeURIComponent(segment))
           .join('/');
       return `${leadingSlash}${encoded}`;
-  };
+  }, []);
 
-  const toPlaybackUrl = (filePath: string) => {
-      if (
-          filePath.startsWith('file://') ||
-          filePath.startsWith('media://') ||
-          filePath.startsWith('blob:') ||
-          filePath.startsWith('data:')
-      ) {
-          return filePath;
-      }
-      if (window.electronAPI) {
-          const encoded = encodePathForUrl(filePath);
-          const prefix = encoded.startsWith('/') ? 'file://' : 'file:///';
-          return `${prefix}${encoded}`;
-      }
-      return toFileUrl(filePath);
-  };
-
-  const toFileUrl = (filePath: string) => {
+  const toFileUrl = useCallback((filePath: string) => {
       if (
           filePath.startsWith('file://') ||
           filePath.startsWith('media://') ||
@@ -132,7 +115,24 @@ const App: React.FC = () => {
       const encoded = encodePathForUrl(filePath);
       const prefix = encoded.startsWith('/') ? 'file://' : 'file:///';
       return `${prefix}${encoded}`;
-  };
+  }, [encodePathForUrl]);
+
+  const toPlaybackUrl = useCallback((filePath: string) => {
+      if (
+          filePath.startsWith('file://') ||
+          filePath.startsWith('media://') ||
+          filePath.startsWith('blob:') ||
+          filePath.startsWith('data:')
+      ) {
+          return filePath;
+      }
+      if (window.electronAPI) {
+          const encoded = encodePathForUrl(filePath);
+          const prefix = encoded.startsWith('/') ? 'file://' : 'file:///';
+          return `${prefix}${encoded}`;
+      }
+      return toFileUrl(filePath);
+  }, [encodePathForUrl, toFileUrl]);
 
   const getMediaDuration = async (urls: string[], kind: 'audio' | 'video') => {
       for (const url of urls) {
@@ -148,7 +148,7 @@ const App: React.FC = () => {
       return 0;
   };
 
-  const decodeAudioWithFallback = async (urls: string[]) => {
+  const decodeAudioWithFallback = useCallback(async (urls: string[]) => {
       let lastError: unknown = null;
       for (const url of urls) {
           try {
@@ -161,7 +161,7 @@ const App: React.FC = () => {
           throw lastError;
       }
       throw new Error('Unable to decode audio.');
-  };
+  }, []);
 
   const getBaseName = (filePath: string) => filePath.split(/[\\/]/).pop() || 'Untitled';
 
