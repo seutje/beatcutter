@@ -47,6 +47,7 @@ const App: React.FC = () => {
   const [useProxies, setUseProxies] = useState<boolean>(false);
   const [optionsOpen, setOptionsOpen] = useState<boolean>(false);
   const [geminiApiKey, setGeminiApiKey] = useState<string>('');
+  const [projectName, setProjectName] = useState<string>('My Beat Video');
 
   // --- Refs for Audio Engine ---
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -216,6 +217,12 @@ const App: React.FC = () => {
     const importClip = async (filePath: string, nameOverride?: string) => {
         const clipId = uuidv4();
         const isAudio = isAudioPath(filePath, nameOverride);
+        const baseNameForDisplay = filePath.startsWith('blob:') && nameOverride
+            ? nameOverride
+            : getBaseName(filePath);
+        if (getExtension(filePath, nameOverride) === 'mp3') {
+            setProjectName(stripExtension(baseNameForDisplay));
+        }
         const fileUrl = toFileUrl(filePath);
         const objectUrl = toPlaybackUrl(filePath);
         const urlCandidates = Array.from(new Set([objectUrl, fileUrl]));
@@ -262,7 +269,7 @@ const App: React.FC = () => {
             filePath,
             duration: duration || 1000,
             thumbnailUrl: '',
-            name: nameOverride ?? getBaseName(filePath),
+            name: nameOverride ?? baseNameForDisplay,
             type: isAudio ? 'audio' : 'video',
             objectUrl
         });
@@ -1016,7 +1023,7 @@ const App: React.FC = () => {
             onToggleOptions={() => setOptionsOpen(prev => !prev)}
             geminiApiKey={geminiApiKey}
             onGeminiApiKeyChange={setGeminiApiKey}
-            projectName="My Beat Video"
+            projectName={projectName}
         />
 
         <div className="flex flex-1 overflow-hidden">
