@@ -61,6 +61,18 @@ const Inspector: React.FC<InspectorProps> = ({
         if (!Number.isFinite(valueSec)) return;
         updateFade(key, { [field]: valueSec * 1000 });
     };
+    const updateDurationMs = (nextDurationMs: number) => {
+        if (!Number.isFinite(nextDurationMs)) return;
+        const minDuration = 1;
+        const maxDuration = Math.max(minDuration, sourceClip.duration);
+        const clampedDuration = Math.min(maxDuration, Math.max(minDuration, nextDurationMs));
+        const maxOffset = Math.max(0, sourceClip.duration - clampedDuration);
+        const clampedOffset = Math.min(segment.sourceStartOffset, maxOffset);
+        onUpdateSegment(segment.id, {
+            duration: clampedDuration,
+            sourceStartOffset: clampedOffset
+        });
+    };
 
     return (
         <div className="w-[300px] bg-stone-900 border-l border-stone-800 flex flex-col h-full overflow-y-auto">
@@ -114,7 +126,9 @@ const Inspector: React.FC<InspectorProps> = ({
                             <input 
                                 type="number" 
                                 value={Math.round(segment.duration)}
-                                disabled
+                                min={1}
+                                step={1}
+                                onChange={(e) => updateDurationMs(Number(e.target.value))}
                                 className="w-full bg-stone-800 border border-stone-700 rounded px-2 py-1 text-sm text-stone-200"
                             />
                          </div>
@@ -126,19 +140,14 @@ const Inspector: React.FC<InspectorProps> = ({
                                 max={8}
                                 step={0.5}
                                 value={Number.isFinite(durationBars) ? Number(durationBars.toFixed(2)) : 1}
+                                disabled={sourceClip.type === 'audio'}
                                 onChange={(e) => {
                                     const nextBars = Number(e.target.value);
                                     if (!Number.isFinite(nextBars) || barDurationMs <= 0) return;
                                     const clampedBars = Math.min(8, Math.max(0.5, nextBars));
-                                    const nextDuration = clampedBars * barDurationMs;
-                                    const maxOffset = Math.max(0, sourceClip.duration);
-                                    const clampedOffset = Math.min(segment.sourceStartOffset, maxOffset);
-                                    onUpdateSegment(segment.id, {
-                                        duration: nextDuration,
-                                        sourceStartOffset: clampedOffset
-                                    });
+                                    updateDurationMs(clampedBars * barDurationMs);
                                 }}
-                                className="w-full bg-stone-800 border border-stone-700 rounded px-2 py-1 text-sm text-stone-200"
+                                className="w-full bg-stone-800 border border-stone-700 rounded px-2 py-1 text-sm text-stone-200 disabled:cursor-not-allowed disabled:opacity-50"
                             />
                          </div>
                     </div>
