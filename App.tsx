@@ -1011,20 +1011,21 @@ const App: React.FC = () => {
           setIntroSkipFrames(Math.round(nextFrames));
           return;
       }
-      const minBeat = Math.min(...beatGrid.beats);
-      const maxNegativeFrames = Math.floor(minBeat * DEFAULT_FPS);
-      const clampedFrames = Math.max(-maxNegativeFrames, Math.round(nextFrames));
+      const clampedFrames = Math.round(nextFrames);
       const deltaFrames = clampedFrames - introSkipFrames;
       if (deltaFrames === 0) {
           setIntroSkipFrames(clampedFrames);
           return;
       }
       const deltaSec = deltaFrames / DEFAULT_FPS;
-      setBeatGrid(prev => ({
-          ...prev,
-          offset: prev.offset + deltaSec,
-          beats: prev.beats.map(beat => Math.max(0, beat + deltaSec))
-      }));
+      setBeatGrid(prev => {
+          const shiftedBeats = prev.beats.map(beat => Math.max(0, beat + deltaSec));
+          return {
+              ...prev,
+              offset: prev.offset + deltaSec,
+              beats: [...new Set(shiftedBeats)].sort((a, b) => a - b)
+          };
+      });
       setIntroSkipFrames(clampedFrames);
   };
 
