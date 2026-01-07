@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, protocol } from "electron";
+import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { registerFfmpegIpc, registerProxyIpc } from "./ffmpeg.js";
@@ -15,6 +16,26 @@ type GeminiAnalyzeResponse = {
   ok: boolean;
   status: number;
   payload?: unknown;
+  error?: string;
+};
+
+type ProjectSaveRequest = {
+  filePath: string;
+  data: string;
+};
+
+type ProjectSaveResponse = {
+  ok: boolean;
+  error?: string;
+};
+
+type ProjectLoadRequest = {
+  filePath: string;
+};
+
+type ProjectLoadResponse = {
+  ok: boolean;
+  data?: string;
   error?: string;
 };
 
@@ -151,6 +172,28 @@ app.whenReady().then(() => {
     });
     return result.canceled ? [] : result.filePaths;
   });
+  ipcMain.handle(
+    "project:save",
+    async (_event, request: ProjectSaveRequest): Promise<ProjectSaveResponse> => {
+      try {
+        await writeFile(request.filePath, request.data, "utf8");
+        return { ok: true };
+      } catch (error) {
+        return { ok: false, error: error instanceof Error ? error.message : "Save failed." };
+      }
+    }
+  );
+  ipcMain.handle(
+    "project:load",
+    async (_event, request: ProjectLoadRequest): Promise<ProjectLoadResponse> => {
+      try {
+        const data = await readFile(request.filePath, "utf8");
+        return { ok: true, data };
+      } catch (error) {
+        return { ok: false, error: error instanceof Error ? error.message : "Load failed." };
+      }
+    }
+  );
   registerFfmpegIpc();
   registerProxyIpc();
 

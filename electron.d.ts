@@ -30,6 +30,26 @@ type GeminiAnalyzeResponse = {
   error?: string;
 };
 
+type ProjectSaveRequest = {
+  filePath: string;
+  data: string;
+};
+
+type ProjectSaveResponse = {
+  ok: boolean;
+  error?: string;
+};
+
+type ProjectLoadRequest = {
+  filePath: string;
+};
+
+type ProjectLoadResponse = {
+  ok: boolean;
+  data?: string;
+  error?: string;
+};
+
 declare global {
   interface Window {
     electronAPI?: {
@@ -37,6 +57,10 @@ declare global {
       getVersions: () => Promise<AppVersions>;
       selectFiles: () => Promise<string[]>;
       geminiAnalyze: (request: GeminiAnalyzeRequest) => Promise<GeminiAnalyzeResponse>;
+      project: {
+        save: (request: ProjectSaveRequest) => Promise<ProjectSaveResponse>;
+        load: (request: ProjectLoadRequest) => Promise<ProjectLoadResponse>;
+      };
       ffmpeg: {
         run: (request: FfmpegRunRequest) => Promise<FfmpegRunResult>;
         cancel: (jobId: string) => void;

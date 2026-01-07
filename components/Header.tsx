@@ -18,6 +18,11 @@ interface HeaderProps {
     geminiApiKey: string;
     onGeminiApiKeyChange: (value: string) => void;
     projectName: string;
+    onSaveProject: () => void;
+    onLoadLastProject: () => void;
+    canSaveProject: boolean;
+    canLoadLastProject: boolean;
+    projectIoStatus: string | null;
 }
 
 const Header: React.FC<HeaderProps> = ({ 
@@ -35,7 +40,12 @@ const Header: React.FC<HeaderProps> = ({
     onToggleOptions,
     geminiApiKey,
     onGeminiApiKeyChange,
-    projectName 
+    projectName,
+    onSaveProject,
+    onLoadLastProject,
+    canSaveProject,
+    canLoadLastProject,
+    projectIoStatus
 }) => {
     return (
         <header className="h-16 bg-stone-900 border-b border-stone-800 flex items-center justify-between px-6 select-none">
@@ -147,6 +157,36 @@ const Header: React.FC<HeaderProps> = ({
                             <p className="mt-2 text-xs text-stone-500">
                                 Uses lightweight proxy media during preview playback.
                             </p>
+                            <div className="mt-4 border-t border-stone-800 pt-4">
+                                <div className="text-xs uppercase tracking-wide text-stone-500">Project</div>
+                                <div className="mt-3 flex gap-2">
+                                    <button
+                                        onClick={onSaveProject}
+                                        disabled={!canSaveProject}
+                                        className={`flex-1 rounded border px-3 py-2 text-sm font-medium transition-colors ${
+                                            canSaveProject
+                                                ? 'bg-stone-800 text-stone-200 border-stone-700 hover:bg-stone-700'
+                                                : 'bg-stone-800 text-stone-500 border-stone-700 cursor-not-allowed'
+                                        }`}
+                                    >
+                                        Save Project
+                                    </button>
+                                    <button
+                                        onClick={onLoadLastProject}
+                                        disabled={!canLoadLastProject}
+                                        className={`flex-1 rounded border px-3 py-2 text-sm font-medium transition-colors ${
+                                            canLoadLastProject
+                                                ? 'bg-stone-800 text-stone-200 border-stone-700 hover:bg-stone-700'
+                                                : 'bg-stone-800 text-stone-500 border-stone-700 cursor-not-allowed'
+                                        }`}
+                                    >
+                                        Load Last
+                                    </button>
+                                </div>
+                                {projectIoStatus && (
+                                    <p className="mt-2 text-xs text-stone-500">{projectIoStatus}</p>
+                                )}
+                            </div>
                         </div>
                     )}
                 </div>

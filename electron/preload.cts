@@ -66,12 +66,38 @@ type GeminiAnalyzeResponse = {
   error?: string;
 };
 
+type ProjectSaveRequest = {
+  filePath: string;
+  data: string;
+};
+
+type ProjectSaveResponse = {
+  ok: boolean;
+  error?: string;
+};
+
+type ProjectLoadRequest = {
+  filePath: string;
+};
+
+type ProjectLoadResponse = {
+  ok: boolean;
+  data?: string;
+  error?: string;
+};
+
 const api = {
   ping: () => ipcRenderer.invoke("app:ping") as Promise<string>,
   getVersions: () => ipcRenderer.invoke("app:getVersions") as Promise<AppVersions>,
   selectFiles: () => ipcRenderer.invoke("dialog:openFiles") as Promise<string[]>,
   geminiAnalyze: (request: GeminiAnalyzeRequest) =>
     ipcRenderer.invoke("gemini:analyze", request) as Promise<GeminiAnalyzeResponse>,
+  project: {
+    save: (request: ProjectSaveRequest) =>
+      ipcRenderer.invoke("project:save", request) as Promise<ProjectSaveResponse>,
+    load: (request: ProjectLoadRequest) =>
+      ipcRenderer.invoke("project:load", request) as Promise<ProjectLoadResponse>,
+  },
   ffmpeg: {
     run: (request: FfmpegRunRequest) =>
       ipcRenderer.invoke("ffmpeg:run", request) as Promise<FfmpegRunResult>,

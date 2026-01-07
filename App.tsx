@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { Project, SourceClip, TimelineTrack, BeatGrid, PlaybackState, ClipSegment } from './types';
+import { SourceClip, TimelineTrack, BeatGrid, PlaybackState, ClipSegment, SavedProject, SerializableClip } from './types';
 import { decodeAudio, analyzeBeats, buildBeatGrid, generateWaveform } from './services/audioUtils';
 import { runFfmpeg, onFfmpegProgress } from './services/ffmpegBridge';
 import { runProxy, cancelProxy } from './services/proxyManager';
@@ -11,6 +11,9 @@ import MediaPool from './components/MediaPool';
 import Timeline from './components/Timeline';
 import Inspector from './components/Inspector';
 import PreviewPlayer from './components/PreviewPlayer';
+
+const LAST_PROJECT_STORAGE_KEY = 'beatcutter:lastProjectPath';
+const PROJECT_FILE_SUFFIX = '.beatcutter.json';
 
 const App: React.FC = () => {
   // --- State ---
@@ -48,6 +51,8 @@ const App: React.FC = () => {
   const [optionsOpen, setOptionsOpen] = useState<boolean>(false);
   const [geminiApiKey, setGeminiApiKey] = useState<string>('');
   const [projectName, setProjectName] = useState<string>('My Beat Video');
+  const [projectIoStatus, setProjectIoStatus] = useState<string | null>(null);
+  const [lastProjectPath, setLastProjectPath] = useState<string | null>(null);
 
   // --- Refs for Audio Engine ---
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -188,6 +193,22 @@ const App: React.FC = () => {
       return idx > 0 ? fileName.slice(0, idx) : fileName;
   };
 
+  const getPrimaryAudioClip = (items: SerializableClip[]) => {
+      const mp3Clip = items.find(
+          (clip) => clip.type === 'audio' && getExtension(clip.filePath, clip.name) === 'mp3'
+      );
+      return mp3Clip ?? items.find((clip) => clip.type === 'audio') ?? null;
+  };
+
+  const getProjectFilePath = (audioClip: SerializableClip) => {
+      if (audioClip.filePath.startsWith('blob:') || audioClip.filePath.startsWith('data:')) {
+          return null;
+      }
+      const dir = getDirName(audioClip.filePath);
+      const base = stripExtension(getBaseName(audioClip.filePath));
+      return joinPath(dir, `${base}${PROJECT_FILE_SUFFIX}`);
+  };
+
   const getProxyPath = (filePath: string) => {
       const dir = getDirName(filePath);
       const baseName = getBaseName(filePath);
@@ -308,6 +329,142 @@ const App: React.FC = () => {
     }
   };
 
+  const buildProjectPayload = (): SavedProject => ({
+      version: 1,
+      projectName,
+      clips: clips.map(({ objectUrl, ...rest }) => rest),
+      tracks,
+      beatGrid,
+      waveform,
+      introSkipFrames,
+      duration,
+      zoom,
+      useProxies
+  });
+
+  const applyProjectPayload = useCallback(async (payload: SavedProject, filePath: string, silent?: boolean) => {
+      const nextClips = Array.isArray(payload.clips)
+          ? payload.clips.map((clip) => ({
+              ...clip,
+              objectUrl: toPlaybackUrl(clip.filePath)
+          }))
+          : [];
+      const nextTracks = Array.isArray(payload.tracks) && payload.tracks.length > 0
+          ? payload.tracks
+          : [
+              { id: 'video-1', type: 'video', segments: [] },
+              { id: 'audio-1', type: 'audio', segments: [] }
+          ];
+      const nextBeatGrid = payload.beatGrid ?? { bpm: 120, offset: 0, beats: [] };
+
+      setProjectName(payload.projectName || 'My Beat Video');
+      setClips(nextClips);
+      setTracks(nextTracks);
+      setBeatGrid(nextBeatGrid);
+      setWaveform(Array.isArray(payload.waveform) ? payload.waveform : []);
+      setIntroSkipFrames(Number.isFinite(payload.introSkipFrames) ? payload.introSkipFrames : 0);
+      setDuration(Number.isFinite(payload.duration) ? payload.duration : 30000);
+      setZoom(clampZoom(Number.isFinite(payload.zoom) ? payload.zoom : DEFAULT_ZOOM));
+      setUseProxies(Boolean(payload.useProxies));
+      setSelectedSegmentId(null);
+      setSwapMode(false);
+      setSwapSourceId(null);
+      setPlaybackState(prev => ({ ...prev, isPlaying: false, currentTime: 0 }));
+
+      masterAudioBufferRef.current = null;
+      const primaryAudio = getPrimaryAudioClip(nextClips);
+      if (primaryAudio) {
+          try {
+              const urlCandidates = [
+                  toFileUrl(primaryAudio.filePath),
+                  toPlaybackUrl(primaryAudio.filePath)
+              ];
+              const buffer = await decodeAudioWithFallback(urlCandidates);
+              masterAudioBufferRef.current = buffer;
+              if (!payload.waveform || payload.waveform.length === 0) {
+                  const waveformPoints = Math.min(4000, Math.max(600, Math.floor(buffer.duration * 60)));
+                  setWaveform(generateWaveform(buffer, waveformPoints));
+              }
+              if (!Number.isFinite(payload.duration) || payload.duration <= 0) {
+                  setDuration(buffer.duration * 1000);
+              }
+          } catch (error) {
+              console.warn('Failed to decode audio for loaded project', error);
+          }
+      }
+
+      setLastProjectPath(filePath);
+      localStorage.setItem(LAST_PROJECT_STORAGE_KEY, filePath);
+      if (!silent) {
+          setProjectIoStatus(`Loaded project from ${filePath}`);
+      }
+  }, [clampZoom, decodeAudioWithFallback, toFileUrl, toPlaybackUrl]);
+
+  const loadProjectFromPath = useCallback(async (filePath: string, silent?: boolean) => {
+      if (!window.electronAPI?.project?.load) {
+          setProjectIoStatus('Project loading is only available in the Electron app.');
+          return;
+      }
+      try {
+          const result = await window.electronAPI.project.load({ filePath });
+          if (!result.ok || !result.data) {
+              throw new Error(result.error || 'Project load failed.');
+          }
+          const parsed = JSON.parse(result.data) as SavedProject;
+          if (!parsed || typeof parsed !== 'object') {
+              throw new Error('Project file is invalid.');
+          }
+          await applyProjectPayload(parsed, filePath, silent);
+      } catch (error) {
+          setProjectIoStatus(error instanceof Error ? error.message : 'Project load failed.');
+      }
+  }, [applyProjectPayload]);
+
+  const handleSaveProject = async () => {
+      if (!window.electronAPI?.project?.save) {
+          setProjectIoStatus('Project saving is only available in the Electron app.');
+          return;
+      }
+      const serializableClips: SerializableClip[] = clips.map(({ objectUrl, ...rest }) => rest);
+      const invalidClip = serializableClips.find(
+          (clip) => clip.filePath.startsWith('blob:') || clip.filePath.startsWith('data:')
+      );
+      if (invalidClip) {
+          setProjectIoStatus('Project saving requires file-based media. Re-import clips in Electron.');
+          return;
+      }
+      const primaryAudio = getPrimaryAudioClip(serializableClips);
+      if (!primaryAudio) {
+          setProjectIoStatus('Add an MP3 before saving the project.');
+          return;
+      }
+      const projectPath = getProjectFilePath(primaryAudio);
+      if (!projectPath) {
+          setProjectIoStatus('Unable to resolve a project file path.');
+          return;
+      }
+      const payload = buildProjectPayload();
+      const result = await window.electronAPI.project.save({
+          filePath: projectPath,
+          data: JSON.stringify(payload, null, 2)
+      });
+      if (!result.ok) {
+          setProjectIoStatus(result.error || 'Project save failed.');
+          return;
+      }
+      setLastProjectPath(projectPath);
+      localStorage.setItem(LAST_PROJECT_STORAGE_KEY, projectPath);
+      setProjectIoStatus(`Saved project to ${projectPath}`);
+  };
+
+  const handleLoadLastProject = () => {
+      if (!lastProjectPath) {
+          setProjectIoStatus('No saved project found.');
+          return;
+      }
+      void loadProjectFromPath(lastProjectPath);
+  };
+
   useEffect(() => {
     const isEditableTarget = (target: EventTarget | null) => {
       if (!(target instanceof HTMLElement)) return false;
@@ -335,6 +492,16 @@ const App: React.FC = () => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [clampZoom]);
+
+  useEffect(() => {
+      const storedPath = localStorage.getItem(LAST_PROJECT_STORAGE_KEY);
+      if (storedPath) {
+          setLastProjectPath(storedPath);
+          if (window.electronAPI?.project?.load) {
+              void loadProjectFromPath(storedPath, true);
+          }
+      }
+  }, [loadProjectFromPath]);
 
   const handleDeleteClip = (id: string) => {
       const jobId = proxyJobsRef.current.get(id);
@@ -1041,6 +1208,9 @@ const App: React.FC = () => {
       }
   };
 
+  const canSaveProject = Boolean(window.electronAPI?.project?.save) && clips.some(c => c.type === 'audio');
+  const canLoadLastProject = Boolean(window.electronAPI?.project?.load) && Boolean(lastProjectPath);
+
   // --- Render ---
   return (
     <div className="flex flex-col h-screen bg-stone-950 text-stone-100 font-sans overflow-hidden">
@@ -1060,6 +1230,11 @@ const App: React.FC = () => {
             geminiApiKey={geminiApiKey}
             onGeminiApiKeyChange={setGeminiApiKey}
             projectName={projectName}
+            onSaveProject={handleSaveProject}
+            onLoadLastProject={handleLoadLastProject}
+            canSaveProject={canSaveProject}
+            canLoadLastProject={canLoadLastProject}
+            projectIoStatus={projectIoStatus}
         />
 
         <div className="flex flex-1 overflow-hidden">

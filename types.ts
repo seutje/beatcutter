@@ -41,12 +41,19 @@ export interface BeatGrid {
   beats: number[]; // Array of timestamps in seconds
 }
 
-export interface Project {
-  id: string;
-  bpm: number;
-  clips: SourceClip[];
-  timeline: TimelineTrack[];
+export type SerializableClip = Omit<SourceClip, 'objectUrl'>;
+
+export interface SavedProject {
+  version: number;
+  projectName: string;
+  clips: SerializableClip[];
+  tracks: TimelineTrack[];
+  beatGrid: BeatGrid;
+  waveform: number[];
+  introSkipFrames: number;
   duration: TimeMS;
+  zoom: number;
+  useProxies: boolean;
 }
 
 export interface PlaybackState {
