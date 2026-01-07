@@ -509,12 +509,21 @@ const App: React.FC = () => {
           cancelProxy(jobId);
           proxyJobsRef.current.delete(id);
       }
+      const targetClip = clips.find(c => c.id === id);
+      const hasRemainingAudio = clips.some(c => c.id !== id && c.type === 'audio');
       setClips(prev => prev.filter(c => c.id !== id));
       // Remove segments from timeline that use this clip
       setTracks(prev => prev.map(t => ({
           ...t,
           segments: t.segments.filter(s => s.sourceClipId !== id)
       })));
+      if (targetClip?.type === 'audio' && !hasRemainingAudio) {
+          masterAudioBufferRef.current = null;
+          setWaveform([]);
+          setBeatGrid({ bpm: 120, offset: 0, beats: [] });
+          setIntroSkipFrames(0);
+          setDuration(30000);
+      }
   };
 
   const startProxyGeneration = async (clip: SourceClip) => {
