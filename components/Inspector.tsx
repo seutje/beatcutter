@@ -136,9 +136,9 @@ const Inspector: React.FC<InspectorProps> = ({
                             <span className="text-xs text-stone-400 block mb-1">Duration (bars)</span>
                             <input
                                 type="number"
-                                min={0.5}
+                                min={0.25}
                                 max={8}
-                                step={0.5}
+                                step={0.25}
                                 value={Number.isFinite(durationBars) ? Number(durationBars.toFixed(2)) : 1}
                                 disabled={sourceClip.type === 'audio'}
                                 onChange={(e) => {
