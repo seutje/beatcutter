@@ -578,11 +578,13 @@ const App: React.FC = () => {
           if (!target) {
               return { ...t, segments: t.segments.filter(s => s.id !== id) };
           }
-          const removedEnd = target.timelineStart + target.duration;
+          const orderedSegments = [...t.segments].sort((a, b) => a.timelineStart - b.timelineStart);
+          const orderById = new Map(orderedSegments.map((segment, index) => [segment.id, index]));
+          const targetIndex = orderById.get(id) ?? -1;
           const nextSegments = t.segments
               .filter(s => s.id !== id)
               .map(s => {
-                  if (s.timelineStart >= removedEnd) {
+                  if (targetIndex >= 0 && (orderById.get(s.id) ?? -1) > targetIndex) {
                       return { ...s, timelineStart: s.timelineStart - target.duration };
                   }
                   return s;
@@ -992,20 +994,19 @@ const App: React.FC = () => {
       setTracks(prev => prev.map(t => {
           const target = t.segments.find(s => s.id === id);
           if (!target) {
-              return {
-                  ...t,
-                  segments: t.segments.map(s => s.id === id ? { ...s, ...updates } : s)
-              };
+              return t;
           }
 
           const nextDuration = updates.duration ?? target.duration;
           const delta = nextDuration - target.duration;
-          const oldEnd = target.timelineStart + target.duration;
+          const orderedSegments = [...t.segments].sort((a, b) => a.timelineStart - b.timelineStart);
+          const orderById = new Map(orderedSegments.map((segment, index) => [segment.id, index]));
+          const targetIndex = orderById.get(id) ?? -1;
           const shiftedSegments = t.segments.map(s => {
               if (s.id === id) {
                   return { ...s, ...updates, duration: nextDuration };
               }
-              if (delta !== 0 && s.timelineStart >= oldEnd) {
+              if (delta !== 0 && targetIndex >= 0 && (orderById.get(s.id) ?? -1) > targetIndex) {
                   return { ...s, timelineStart: s.timelineStart + delta };
               }
               return s;
