@@ -1339,8 +1339,8 @@ const App: React.FC = () => {
 
             {/* Center: Preview Stage */}
             <div className="flex-1 flex flex-col bg-stone-950 relative min-w-0">
-                <div className="flex-1 p-4 flex items-center justify-center">
-                    <div className="aspect-video w-full max-w-4xl bg-stone-900 shadow-2xl rounded-lg overflow-hidden border border-stone-800">
+                <div className="flex-1 p-4 flex items-stretch justify-stretch">
+                    <div className="w-full h-full bg-stone-900 shadow-2xl rounded-lg overflow-hidden border border-stone-800">
                         <PreviewPlayer 
                             playbackState={playbackState} 
                             videoTrack={tracks.find(t => t.type === 'video')}
