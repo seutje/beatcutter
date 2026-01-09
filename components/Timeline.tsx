@@ -53,6 +53,8 @@ const Timeline: React.FC<TimelineProps> = ({
         };
     };
 
+    const rulerHeight = 32;
+    const timelineHeight = rulerHeight + tracks.length * TRACK_HEIGHT;
     // Calculate width based on total duration
     const totalWidth = (duration / 1000) * zoom;
     const clipNameById = useMemo(
@@ -160,7 +162,8 @@ const Timeline: React.FC<TimelineProps> = ({
     return (
         <div
             ref={scrollContainerRef}
-            className="flex-1 bg-stone-900 overflow-x-auto overflow-y-hidden relative select-none custom-scrollbar border-t border-stone-800 h-64 flex flex-col min-w-0"
+            className="flex-none bg-stone-900 overflow-x-auto overflow-y-hidden relative select-none custom-scrollbar border-t border-stone-800 flex flex-col min-w-0"
+            style={{ height: `${timelineHeight}px` }}
             onWheel={handleWheel}
         >
             {/* Time Ruler */}
@@ -180,8 +183,8 @@ const Timeline: React.FC<TimelineProps> = ({
 
             {/* Tracks Container */}
             <div
-                className="relative flex-1"
-                style={{ width: `${Math.max(totalWidth, window.innerWidth)}px` }}
+                className="relative"
+                style={{ width: `${Math.max(totalWidth, window.innerWidth)}px`, height: `${tracks.length * TRACK_HEIGHT}px` }}
                 onClick={handleTimelineClick}
                 onMouseDown={handleScrubStart}
             >
