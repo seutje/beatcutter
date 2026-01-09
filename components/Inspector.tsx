@@ -3,6 +3,7 @@ import { ClipSegment, FadeRange, SourceClip, TimelineTrack } from '../types';
 
 interface InspectorProps {
     selectedSegmentId: string | null;
+    selectedMediaClipId: string | null;
     tracks: TimelineTrack[];
     clips: SourceClip[];
     onUpdateSegment: (id: string, updates: Partial<ClipSegment>) => void;
@@ -16,10 +17,14 @@ interface InspectorProps {
     barLengthSec: number;
     onUpdateBpm: (bpm: number) => void;
     onUpdateBarLength: (barLengthSec: number) => void;
+    mediaClipBars: number;
+    onUpdateMediaClipBars: (bars: number) => void;
+    onAddClipToTimeline: (clipId: string) => void;
 }
 
 const Inspector: React.FC<InspectorProps> = ({
     selectedSegmentId,
+    selectedMediaClipId,
     tracks,
     clips,
     onUpdateSegment,
@@ -32,14 +37,60 @@ const Inspector: React.FC<InspectorProps> = ({
     bpm,
     barLengthSec,
     onUpdateBpm,
-    onUpdateBarLength
+    onUpdateBarLength,
+    mediaClipBars,
+    onUpdateMediaClipBars,
+    onAddClipToTimeline
 }) => {
     const segment = tracks.flatMap(track => track.segments).find(s => s.id === selectedSegmentId);
     const sourceClip = segment ? clips.find(c => c.id === segment.sourceClipId) : null;
+    const selectedMediaClip = selectedMediaClipId ? clips.find(c => c.id === selectedMediaClipId) : null;
     const defaultFadeIn = { enabled: false, startMs: 0, endMs: 500 };
     const defaultFadeOut = { enabled: false, startMs: -500, endMs: 0 };
 
     if (!segment || !sourceClip) {
+        if (selectedMediaClip) {
+            return (
+                <div className="w-[300px] bg-stone-900 border-l border-stone-800 flex flex-col h-full overflow-y-auto">
+                    <div className="p-4 border-b border-stone-800">
+                        <h2 className="text-stone-400 text-sm font-semibold uppercase tracking-wider mb-1">Inspector</h2>
+                        <h3 className="text-stone-100 font-medium truncate" title={selectedMediaClip.name}>
+                            {selectedMediaClip.name}
+                        </h3>
+                    </div>
+                    <div className="p-4 space-y-4">
+                        {selectedMediaClip.type === 'video' ? (
+                            <>
+                                <div>
+                                    <label className="block text-xs text-stone-500 mb-2 uppercase">Clip Length (bars)</label>
+                                    <input
+                                        type="number"
+                                        min={0.25}
+                                        max={16}
+                                        step={0.25}
+                                        value={Number.isFinite(mediaClipBars) ? mediaClipBars : 4}
+                                        onChange={(e) => onUpdateMediaClipBars(Number(e.target.value))}
+                                        className="w-full bg-stone-800 border border-stone-700 rounded px-2 py-1 text-sm text-stone-200"
+                                    />
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => onAddClipToTimeline(selectedMediaClip.id)}
+                                    className="w-full rounded border border-amber-400/60 bg-amber-500/20 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-amber-100 hover:bg-amber-500/30"
+                                >
+                                    Add to Timeline
+                                </button>
+                            </>
+                        ) : (
+                            <p className="text-sm text-stone-500">
+                                Select a video clip to add it to the timeline.
+                            </p>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
         return (
             <div className="w-[300px] bg-stone-900 border-l border-stone-800 p-6 flex flex-col items-center justify-center text-stone-500">
                 <p>Select a clip on the timeline to inspect.</p>

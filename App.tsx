@@ -33,6 +33,8 @@ const App: React.FC = () => {
   const [duration, setDuration] = useState<number>(30000); // 30s default
   const [zoom, setZoom] = useState<number>(DEFAULT_ZOOM);
   const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
+  const [selectedMediaClipId, setSelectedMediaClipId] = useState<string | null>(null);
+  const [mediaClipBars, setMediaClipBars] = useState<number>(4);
   const [swapMode, setSwapMode] = useState<boolean>(false);
   const [swapSourceId, setSwapSourceId] = useState<string | null>(null);
   const [autoSyncOpen, setAutoSyncOpen] = useState<boolean>(false);
@@ -524,6 +526,9 @@ const App: React.FC = () => {
           setIntroSkipFrames(0);
           setDuration(30000);
       }
+      if (selectedMediaClipId === id) {
+          setSelectedMediaClipId(null);
+      }
   };
 
   const startProxyGeneration = async (clip: SourceClip) => {
@@ -680,6 +685,46 @@ const App: React.FC = () => {
           return;
       }
       setSelectedSegmentId(id);
+      setSelectedMediaClipId(null);
+  };
+
+  const handleSelectMediaClip = (id: string) => {
+      setSelectedMediaClipId(id);
+      setSelectedSegmentId(null);
+      setSwapMode(false);
+      setSwapSourceId(null);
+  };
+
+  const handleAddClipToTimeline = (clipId: string) => {
+      const clip = clips.find(c => c.id === clipId);
+      if (!clip || clip.type !== 'video') return;
+      const barLengthSec = (60 / beatGrid.bpm) * BEATS_PER_BAR;
+      const barDurationMs = Number.isFinite(barLengthSec) ? barLengthSec * 1000 : 0;
+      const requestedBars = Number.isFinite(mediaClipBars) ? mediaClipBars : 4;
+      const clampedBars = Math.min(16, Math.max(0.25, requestedBars));
+      const desiredDuration = barDurationMs > 0 ? clampedBars * barDurationMs : clip.duration;
+      const durationMs = Math.min(clip.duration, Math.max(1, desiredDuration));
+      const introSkipMs = Math.max(0, introSkipFrames) / DEFAULT_FPS * 1000;
+      const segmentId = uuidv4();
+
+      setTracks(prev => prev.map(t => {
+          if (t.type !== 'video') return t;
+          const lastEnd = t.segments.reduce((max, seg) => Math.max(max, seg.timelineStart + seg.duration), 0);
+          const timelineStart = t.segments.length > 0 ? lastEnd : introSkipMs;
+          const nextSegment: ClipSegment = {
+              id: segmentId,
+              sourceClipId: clip.id,
+              timelineStart,
+              duration: durationMs,
+              sourceStartOffset: 0,
+              fadeIn: { ...defaultFadeIn },
+              fadeOut: { ...defaultFadeOut }
+          };
+          return { ...t, segments: [...t.segments, nextSegment] };
+      }));
+
+      setSelectedSegmentId(segmentId);
+      setSelectedMediaClipId(null);
   };
 
   const openAutoSyncDialog = () => {
@@ -1250,7 +1295,13 @@ const App: React.FC = () => {
 
         <div className="flex flex-1 overflow-hidden">
             {/* Left: Media Pool */}
-            <MediaPool clips={clips} onImport={handleImport} onDelete={handleDeleteClip} />
+            <MediaPool
+                clips={clips}
+                onImport={handleImport}
+                onDelete={handleDeleteClip}
+                selectedClipId={selectedMediaClipId}
+                onSelectClip={handleSelectMediaClip}
+            />
 
             {/* Center: Preview Stage */}
             <div className="flex-1 flex flex-col bg-stone-950 relative min-w-0">
@@ -1288,6 +1339,7 @@ const App: React.FC = () => {
             {/* Right: Inspector */}
             <Inspector 
                 selectedSegmentId={selectedSegmentId}
+                selectedMediaClipId={selectedMediaClipId}
                 tracks={tracks}
                 clips={clips}
                 onUpdateSegment={handleUpdateSegment}
@@ -1301,6 +1353,9 @@ const App: React.FC = () => {
                 barLengthSec={(60 / beatGrid.bpm) * BEATS_PER_BAR}
                 onUpdateBpm={handleUpdateBpm}
                 onUpdateBarLength={handleUpdateBarLength}
+                mediaClipBars={mediaClipBars}
+                onUpdateMediaClipBars={setMediaClipBars}
+                onAddClipToTimeline={handleAddClipToTimeline}
             />
         </div>
 

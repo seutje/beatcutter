@@ -6,9 +6,11 @@ interface MediaPoolProps {
     clips: SourceClip[];
     onImport: (files?: FileList) => void;
     onDelete: (id: string) => void;
+    selectedClipId: string | null;
+    onSelectClip: (id: string) => void;
 }
 
-const MediaPool: React.FC<MediaPoolProps> = ({ clips, onImport, onDelete }) => {
+const MediaPool: React.FC<MediaPoolProps> = ({ clips, onImport, onDelete, selectedClipId, onSelectClip }) => {
     const fileInputRef = React.useRef<HTMLInputElement>(null);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -49,8 +51,18 @@ const MediaPool: React.FC<MediaPoolProps> = ({ clips, onImport, onDelete }) => {
             </div>
 
             <div className="flex-1 overflow-y-auto p-2 space-y-2">
-                {clips.map(clip => (
-                    <div key={clip.id} className="group flex gap-3 p-2 rounded bg-stone-800/60 hover:bg-stone-800 transition-colors cursor-pointer border border-transparent hover:border-stone-600">
+                {clips.map(clip => {
+                    const isSelected = selectedClipId === clip.id;
+                    return (
+                    <div
+                        key={clip.id}
+                        onClick={() => onSelectClip(clip.id)}
+                        className={`group flex gap-3 p-2 rounded transition-colors cursor-pointer border ${
+                            isSelected
+                                ? 'bg-stone-800 border-amber-400/60 shadow-[0_0_12px_rgba(245,158,11,0.15)]'
+                                : 'bg-stone-800/60 border-transparent hover:bg-stone-800 hover:border-stone-600'
+                        }`}
+                    >
                         <div className="w-16 h-16 bg-stone-950 rounded flex items-center justify-center overflow-hidden shrink-0 relative">
                              {clip.type === 'video' ? (
                                 <video src={clip.objectUrl} className="w-full h-full object-cover pointer-events-none" />
@@ -75,7 +87,8 @@ const MediaPool: React.FC<MediaPoolProps> = ({ clips, onImport, onDelete }) => {
                             <Trash2 size={14} />
                         </button>
                     </div>
-                ))}
+                );
+                })}
 
                 {clips.length === 0 && (
                     <div className="text-center text-stone-500 mt-10 text-sm">
