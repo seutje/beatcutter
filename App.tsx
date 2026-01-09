@@ -1126,7 +1126,8 @@ const App: React.FC = () => {
       setExportError(null);
 
       const [targetWidth, targetHeight] = exportResolution.split('x').map(Number);
-      const outputFileName = `beatcutter-export-${Date.now()}.mp4`;
+      const exportTimestamp = Math.floor(Date.now() / 1000);
+      const primaryAudioForExport = getPrimaryAudioClip(clips);
       const inputMap = new Map<string, { index: number; name: string }>();
       let inputIndex = 0;
 
@@ -1203,11 +1204,19 @@ const App: React.FC = () => {
 
           const firstClipId = sortedSegments.find(segment => inputMap.has(segment.sourceClipId))?.sourceClipId;
           const firstClipPath = firstClipId ? inputMap.get(firstClipId)?.name ?? '' : '';
-          if (!firstClipPath) {
+          const audioExportPath = primaryAudioForExport?.filePath ?? '';
+          const canUseAudioPath = audioExportPath && !audioExportPath.startsWith('blob:') && !audioExportPath.startsWith('data:');
+          const outputBaseStem = canUseAudioPath
+              ? stripExtension(getBaseName(audioExportPath)) || 'beatcutter-export'
+              : 'beatcutter-export';
+          const outputDir = canUseAudioPath
+              ? getDirName(audioExportPath)
+              : (firstClipPath ? getDirName(firstClipPath) : '');
+          if (!outputDir) {
               setExportError('Unable to resolve output folder for export.');
               return;
           }
-          const outputDir = getDirName(firstClipPath);
+          const outputFileName = `${outputBaseStem} - ${exportTimestamp}.mp4`;
           const outputPath = joinPath(outputDir, outputFileName);
 
           const outputDurationSec = sortedSegments.reduce((max, segment) => {
