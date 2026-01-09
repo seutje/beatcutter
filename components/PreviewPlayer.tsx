@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { PlaybackState, TimelineTrack, SourceClip, ClipSegment } from '../types';
 
 interface PreviewPlayerProps {
@@ -10,12 +10,14 @@ interface PreviewPlayerProps {
 
 const PreviewPlayer: React.FC<PreviewPlayerProps> = ({ playbackState, videoTrack, clips, getClipUrl }) => {
     // Dual buffer references
+    const containerRef = useRef<HTMLDivElement>(null);
     const playerARef = useRef<HTMLVideoElement>(null);
     const playerBRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const renderLoopRef = useRef<number>(0);
     const timeRef = useRef<number>(0);
     const trackRef = useRef<TimelineTrack | undefined>(undefined);
+    const [isFullscreen, setIsFullscreen] = useState(false);
 
     useEffect(() => {
         timeRef.current = playbackState.currentTime;
@@ -24,6 +26,35 @@ const PreviewPlayer: React.FC<PreviewPlayerProps> = ({ playbackState, videoTrack
     useEffect(() => {
         trackRef.current = videoTrack;
     }, [videoTrack]);
+
+    useEffect(() => {
+        const handleFullscreenChange = () => {
+            setIsFullscreen(Boolean(document.fullscreenElement));
+        };
+
+        document.addEventListener('fullscreenchange', handleFullscreenChange);
+        handleFullscreenChange();
+
+        return () => {
+            document.removeEventListener('fullscreenchange', handleFullscreenChange);
+        };
+    }, []);
+
+    const handleToggleFullscreen = () => {
+        const container = containerRef.current;
+        if (!container) return;
+
+        if (document.fullscreenElement) {
+            if (document.exitFullscreen) {
+                document.exitFullscreen().catch(() => {});
+            }
+            return;
+        }
+
+        if (container.requestFullscreen) {
+            container.requestFullscreen().catch(() => {});
+        }
+    };
 
     
     // Sync Logic
@@ -214,7 +245,29 @@ const PreviewPlayer: React.FC<PreviewPlayerProps> = ({ playbackState, videoTrack
 
 
     return (
-        <div className="w-full h-full bg-stone-950 flex items-center justify-center relative overflow-hidden">
+        <div ref={containerRef} className="w-full h-full bg-stone-950 flex items-center justify-center relative overflow-hidden">
+            <button
+                type="button"
+                onClick={handleToggleFullscreen}
+                className="absolute top-2 right-2 z-30 flex items-center gap-1 rounded-md bg-black/60 px-2 py-1 text-xs font-semibold text-white shadow hover:bg-black/80"
+                aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+                title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+            >
+                <svg
+                    viewBox="0 0 20 20"
+                    className="h-4 w-4"
+                    aria-hidden="true"
+                    focusable="false"
+                    fill="currentColor"
+                >
+                    {isFullscreen ? (
+                        <path d="M5 9V5h4v2H7v2H5zm6-4h4v4h-2V7h-2V5zm-6 6h2v2h2v2H5v-4zm8 0h2v4h-4v-2h2v-2z" />
+                    ) : (
+                        <path d="M5 5h4v2H7v2H5V5zm8 0h-4v2h2v2h2V5zM5 15h4v-2H7v-2H5v4zm8-4h-2v2h-2v2h4v-4z" />
+                    )}
+                </svg>
+                <span className="hidden sm:inline">{isFullscreen ? 'Exit' : 'Full'}</span>
+            </button>
             {/* The Output Canvas */}
             <canvas 
                 ref={canvasRef} 
