@@ -1165,9 +1165,34 @@ const App: React.FC = () => {
               if (!input) return;
               const startSec = segment.sourceStartOffset / 1000;
               const durationSec = segment.duration / 1000;
+              const fadeFilters: string[] = [];
+              const fadeIn = segment.fadeIn ?? defaultFadeIn;
+              if (fadeIn.enabled) {
+                  const start = Math.max(0, fadeIn.startMs);
+                  const end = Math.max(start, fadeIn.endMs);
+                  const durationMs = end - start;
+                  const stSec = (durationMs > 0 ? start : end) / 1000;
+                  const dSec = Math.max(durationMs / 1000, 0.001);
+                  fadeFilters.push(`fade=t=in:st=${stSec.toFixed(3)}:d=${dSec.toFixed(3)}`);
+              }
+              const fadeOut = segment.fadeOut ?? defaultFadeOut;
+              if (fadeOut.enabled) {
+                  const startRaw = segment.duration + fadeOut.startMs;
+                  const endRaw = segment.duration + fadeOut.endMs;
+                  const clampedStart = Math.max(0, Math.min(segment.duration, startRaw));
+                  const clampedEnd = Math.max(0, Math.min(segment.duration, endRaw));
+                  const start = Math.min(clampedStart, clampedEnd);
+                  const end = Math.max(clampedStart, clampedEnd);
+                  const durationMs = end - start;
+                  const stSec = (durationMs > 0 ? start : end) / 1000;
+                  const dSec = Math.max(durationMs / 1000, 0.001);
+                  fadeFilters.push(`fade=t=out:st=${stSec.toFixed(3)}:d=${dSec.toFixed(3)}`);
+              }
+              const fadeSuffix = fadeFilters.length > 0 ? `,${fadeFilters.join(',')}` : '';
               filterParts.push(
                   `[${input.index}:v]trim=start=${startSec.toFixed(3)}:duration=${durationSec.toFixed(3)},` +
-                  `setpts=PTS-STARTPTS,scale=${targetWidth}:${targetHeight}:flags=fast_bilinear[v${idx}]`
+                  `setpts=PTS-STARTPTS,scale=${targetWidth}:${targetHeight}:flags=fast_bilinear` +
+                  `${fadeSuffix}[v${idx}]`
               );
               concatInputs.push(`[v${idx}]`);
           });
