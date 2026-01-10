@@ -20,6 +20,7 @@ interface HeaderProps {
     projectName: string;
     onSaveProject: () => void;
     onLoadLastProject: () => void;
+    onNewProject: () => void;
     canSaveProject: boolean;
     canLoadLastProject: boolean;
     projectIoStatus: string | null;
@@ -43,6 +44,7 @@ const Header: React.FC<HeaderProps> = ({
     projectName,
     onSaveProject,
     onLoadLastProject,
+    onNewProject,
     canSaveProject,
     canLoadLastProject,
     projectIoStatus
@@ -53,7 +55,15 @@ const Header: React.FC<HeaderProps> = ({
                 <div className="text-xl font-bold bg-gradient-to-r from-amber-300 to-rose-400 bg-clip-text text-transparent">
                     BeatCutter
                 </div>
-                <span className="text-stone-400 text-sm">{projectName}</span>
+                <div className="flex items-center gap-2">
+                    <span className="text-stone-400 text-sm">{projectName}</span>
+                    <button
+                        onClick={onNewProject}
+                        className="text-xs uppercase tracking-wide rounded border border-stone-700 px-2 py-1 text-stone-300 transition-colors hover:bg-stone-800 hover:text-stone-100"
+                    >
+                        New Project
+                    </button>
+                </div>
             </div>
 
             <div className="flex items-center gap-4">

@@ -467,6 +467,43 @@ const App: React.FC = () => {
       void loadProjectFromPath(lastProjectPath);
   };
 
+  const handleNewProject = () => {
+      if (playbackState.isPlaying) {
+          pause();
+      }
+      if (scrubPreviewSourceRef.current) {
+          try { scrubPreviewSourceRef.current.stop(); } catch (e) {}
+          scrubPreviewSourceRef.current = null;
+      }
+      proxyJobsRef.current.forEach((jobId) => {
+          if (window.electronAPI?.proxy?.cancel) {
+              cancelProxy(jobId);
+          }
+      });
+      proxyJobsRef.current.clear();
+
+      setClips([]);
+      setTracks([
+          { id: 'video-1', type: 'video', segments: [] },
+          { id: 'audio-1', type: 'audio', segments: [] }
+      ]);
+      setBeatGrid({ bpm: 120, offset: 0, beats: [] });
+      setWaveform([]);
+      setIntroSkipFrames(0);
+      setDuration(30000);
+      setSelectedSegmentId(null);
+      setSelectedMediaClipId(null);
+      setSwapMode(false);
+      setSwapSourceId(null);
+      setAutoSyncOpen(false);
+      setAutoSyncError(null);
+      setAutoSyncAnalyzing(false);
+      setPlaybackState(prev => ({ ...prev, isPlaying: false, currentTime: 0 }));
+      setProjectName('My Beat Video');
+      setProjectIoStatus('Started a new project.');
+      masterAudioBufferRef.current = null;
+  };
+
   useEffect(() => {
     const isEditableTarget = (target: EventTarget | null) => {
       if (!(target instanceof HTMLElement)) return false;
@@ -1322,6 +1359,7 @@ const App: React.FC = () => {
             projectName={projectName}
             onSaveProject={handleSaveProject}
             onLoadLastProject={handleLoadLastProject}
+            onNewProject={handleNewProject}
             canSaveProject={canSaveProject}
             canLoadLastProject={canLoadLastProject}
             projectIoStatus={projectIoStatus}
