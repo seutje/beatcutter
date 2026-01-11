@@ -5,7 +5,7 @@ interface PreviewPlayerProps {
     playbackState: PlaybackState;
     videoTrack: TimelineTrack | undefined;
     clips: SourceClip[];
-    getClipUrl?: (clip: SourceClip) => string;
+    getClipUrl?: (clip: SourceClip, segment?: ClipSegment) => string;
 }
 
 const PreviewPlayer: React.FC<PreviewPlayerProps> = ({ playbackState, videoTrack, clips, getClipUrl }) => {
@@ -91,11 +91,12 @@ const PreviewPlayer: React.FC<PreviewPlayerProps> = ({ playbackState, videoTrack
 
         const sourceClip = clips.find(c => c.id === currentSegment.sourceClipId);
         if (!sourceClip) return;
-        const sourceUrl = getClipUrl ? getClipUrl(sourceClip) : sourceClip.objectUrl;
+        const sourceUrl = getClipUrl ? getClipUrl(sourceClip, currentSegment) : sourceClip.objectUrl;
 
         // Calculate the seek time within the source file.
         // If the segment duration exceeds the remaining clip duration, slow playback to fit.
-        const isReverse = Boolean(currentSegment.reverse);
+        const segmentReverse = Boolean(currentSegment.reverse);
+        const useReverseProxy = segmentReverse && Boolean(sourceClip.reverseProxyPath);
         const offsetInSegment = Math.max(
             0,
             Math.min(currentSegment.duration, currentTime - currentSegment.timelineStart)
@@ -108,9 +109,14 @@ const PreviewPlayer: React.FC<PreviewPlayerProps> = ({ playbackState, videoTrack
             ? availableDuration / currentSegment.duration
             : requestedRate;
         const effectiveRate = Math.min(requestedRate, maxRate);
-        const effectiveOffset = isReverse ? currentSegment.duration - offsetInSegment : offsetInSegment;
+        const effectiveOffset = segmentReverse ? currentSegment.duration - offsetInSegment : offsetInSegment;
         const targetSourceTime = (currentSegment.sourceStartOffset + effectiveOffset * effectiveRate) / 1000;
+        const clipDurationSec = sourceClip.duration / 1000;
+        const playbackSourceTime = useReverseProxy && Number.isFinite(clipDurationSec) && clipDurationSec > 0
+            ? Math.max(0, clipDurationSec - targetSourceTime)
+            : targetSourceTime;
         const appliedRate = Math.min(4, Math.max(0.5, effectiveRate));
+        const isReverse = segmentReverse && !useReverseProxy;
 
         const player = playerARef.current;
         
@@ -129,9 +135,9 @@ const PreviewPlayer: React.FC<PreviewPlayerProps> = ({ playbackState, videoTrack
             }
 
             const seekToTarget = () => {
-                if (!Number.isFinite(targetSourceTime)) return;
+                if (!Number.isFinite(playbackSourceTime)) return;
                 const durationSec = Number.isFinite(player.duration) && player.duration > 0 ? player.duration : null;
-                const clampedTarget = durationSec ? Math.min(targetSourceTime, Math.max(0, durationSec - 0.05)) : targetSourceTime;
+                const clampedTarget = durationSec ? Math.min(playbackSourceTime, Math.max(0, durationSec - 0.05)) : playbackSourceTime;
                 const timeDiff = Math.abs(player.currentTime - clampedTarget);
                 const driftTolerance = playbackState.isPlaying ? 0.5 : 0;
                 if (segmentChanged || sourceChanged || timeDiff > driftTolerance || !playbackState.isPlaying) {

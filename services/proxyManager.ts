@@ -8,6 +8,7 @@ export type ProxyRunRequest = {
   preset?: string;
   withAudio?: boolean;
   durationSec?: number;
+  reverse?: boolean;
 };
 
 export type ProxyRunResult = {

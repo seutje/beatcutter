@@ -64,6 +64,8 @@ const App: React.FC = () => {
   const startTimeRef = useRef<number>(0);
   const animationFrameRef = useRef<number>(0);
   const proxyJobsRef = useRef<Map<string, string>>(new Map());
+  const reverseProxyJobsRef = useRef<Map<string, string>>(new Map());
+  const reverseProxyDebounceRef = useRef<number | null>(null);
   const defaultFadeIn = { enabled: false, startMs: 0, endMs: 500 };
   const defaultFadeOut = { enabled: false, startMs: -500, endMs: 0 };
 
@@ -217,6 +219,14 @@ const App: React.FC = () => {
       const baseStem = stripExtension(baseName);
       const proxyDir = joinPath(dir, 'proxies');
       return joinPath(proxyDir, `${baseStem}.proxy.mp4`);
+  };
+
+  const getReverseProxyPath = (filePath: string) => {
+      const dir = getDirName(filePath);
+      const baseName = getBaseName(filePath);
+      const baseStem = stripExtension(baseName);
+      const proxyDir = joinPath(dir, 'proxies');
+      return joinPath(proxyDir, `${baseStem}.reverse.proxy.mp4`);
   };
 
   const isAudioPath = (filePath: string, fallbackName?: string) => {
@@ -482,6 +492,12 @@ const App: React.FC = () => {
           }
       });
       proxyJobsRef.current.clear();
+      reverseProxyJobsRef.current.forEach((jobId) => {
+          if (window.electronAPI?.proxy?.cancel) {
+              cancelProxy(jobId);
+          }
+      });
+      reverseProxyJobsRef.current.clear();
 
       setClips([]);
       setTracks([
@@ -505,6 +521,7 @@ const App: React.FC = () => {
       masterAudioBufferRef.current = null;
   };
 
+  // Debounce reverse proxies so toggling/editing segments doesn't start renders too eagerly.
   useEffect(() => {
     const isEditableTarget = (target: EventTarget | null) => {
       if (!(target instanceof HTMLElement)) return false;
@@ -549,6 +566,11 @@ const App: React.FC = () => {
           cancelProxy(jobId);
           proxyJobsRef.current.delete(id);
       }
+      const reverseJobId = reverseProxyJobsRef.current.get(id);
+      if (reverseJobId && window.electronAPI?.proxy?.cancel) {
+          cancelProxy(reverseJobId);
+          reverseProxyJobsRef.current.delete(id);
+      }
       const targetClip = clips.find(c => c.id === id);
       const hasRemainingAudio = clips.some(c => c.id !== id && c.type === 'audio');
       setClips(prev => prev.filter(c => c.id !== id));
@@ -575,6 +597,7 @@ const App: React.FC = () => {
       if (clip.filePath.startsWith('blob:') || clip.filePath.startsWith('data:')) return;
       if (clip.proxyPath) return;
       if (proxyJobsRef.current.has(clip.id)) return;
+      if (reverseProxyJobsRef.current.has(clip.id)) return;
 
       const outputPath = getProxyPath(clip.filePath);
       const jobId = uuidv4();
@@ -599,12 +622,52 @@ const App: React.FC = () => {
       }
   };
 
-  const resolvePreviewUrl = useCallback((clip: SourceClip) => {
+  const startReverseProxyGeneration = async (clip: SourceClip) => {
+      if (!window.electronAPI?.proxy?.run) return;
+      if (clip.type !== 'video') return;
+      if (clip.filePath.startsWith('blob:') || clip.filePath.startsWith('data:')) return;
+      if (clip.reverseProxyPath) return;
+      if (reverseProxyJobsRef.current.has(clip.id)) return;
+      if (proxyJobsRef.current.has(clip.id)) return;
+
+      const outputPath = getReverseProxyPath(clip.filePath);
+      const jobId = uuidv4();
+      reverseProxyJobsRef.current.set(clip.id, jobId);
+
+      try {
+          const execResult = await runProxy({
+              jobId,
+              inputPath: clip.filePath,
+              outputPath,
+              durationSec: clip.duration / 1000,
+              reverse: true,
+          });
+          if (execResult.exitCode !== 0 || execResult.signal) {
+              console.warn('Reverse proxy generation failed', execResult, clip.filePath);
+              return;
+          }
+          setClips(prev => prev.map(c => c.id === clip.id ? { ...c, reverseProxyPath: outputPath } : c));
+      } catch (error) {
+          console.warn('Reverse proxy generation error', error);
+      } finally {
+          reverseProxyJobsRef.current.delete(clip.id);
+      }
+  };
+
+  const resolvePreviewUrl = useCallback((clip: SourceClip, segment?: ClipSegment) => {
+      if (segment?.reverse) {
+          if (clip.reverseProxyPath) {
+              return toPlaybackUrl(clip.reverseProxyPath);
+          }
+          if (useProxies && clip.proxyPath) {
+              return toPlaybackUrl(clip.proxyPath);
+          }
+      }
       if (useProxies && clip.proxyPath) {
           return toPlaybackUrl(clip.proxyPath);
       }
       return toPlaybackUrl(clip.filePath);
-  }, [useProxies]);
+  }, [useProxies, toPlaybackUrl]);
 
   useEffect(() => {
       if (!useProxies) return;
@@ -614,6 +677,40 @@ const App: React.FC = () => {
           }
       });
   }, [useProxies, clips]);
+
+  useEffect(() => {
+      if (!window.electronAPI?.proxy?.run) return;
+      const reversedClipIds = new Set<string>();
+      tracks.forEach((track) => {
+          track.segments.forEach((segment) => {
+              if (segment.reverse) {
+                  reversedClipIds.add(segment.sourceClipId);
+              }
+          });
+      });
+
+      if (reverseProxyDebounceRef.current) {
+          window.clearTimeout(reverseProxyDebounceRef.current);
+          reverseProxyDebounceRef.current = null;
+      }
+      if (reversedClipIds.size === 0) return;
+
+      reverseProxyDebounceRef.current = window.setTimeout(() => {
+          reversedClipIds.forEach((clipId) => {
+              const clip = clips.find(c => c.id === clipId);
+              if (clip && !clip.reverseProxyPath) {
+                  void startReverseProxyGeneration(clip);
+              }
+          });
+      }, 600);
+
+      return () => {
+          if (reverseProxyDebounceRef.current) {
+              window.clearTimeout(reverseProxyDebounceRef.current);
+              reverseProxyDebounceRef.current = null;
+          }
+      };
+  }, [clips, tracks]);
 
   const handleRemoveSegment = (id: string) => {
       setTracks(prev => prev.map(t => {

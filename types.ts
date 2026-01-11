@@ -4,6 +4,7 @@ export interface SourceClip {
   id: string;
   filePath: string;
   proxyPath?: string;
+  reverseProxyPath?: string;
   duration: TimeMS;
   thumbnailUrl: string;
   name: string;

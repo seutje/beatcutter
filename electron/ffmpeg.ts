@@ -27,6 +27,7 @@ type ProxyRunRequest = {
   preset?: string;
   withAudio?: boolean;
   durationSec?: number;
+  reverse?: boolean;
 };
 
 type ActiveJob = {
@@ -162,6 +163,11 @@ const buildProxyArgs = (request: ProxyRunRequest): string[] => {
   const crf = Number.isFinite(request.crf) ? Math.min(51, Math.max(0, request.crf!)) : 28;
   const preset = request.preset ?? "veryfast";
   const withAudio = Boolean(request.withAudio);
+  const reverse = Boolean(request.reverse);
+  const filterChain = [
+    `scale=${maxWidth}:${maxHeight}:force_original_aspect_ratio=decrease`,
+    ...(reverse ? ["reverse"] : []),
+  ].join(",");
 
   return [
     "-loglevel",
@@ -170,7 +176,7 @@ const buildProxyArgs = (request: ProxyRunRequest): string[] => {
     "-i",
     request.inputPath,
     "-vf",
-    `scale=${maxWidth}:${maxHeight}:force_original_aspect_ratio=decrease`,
+    filterChain,
     "-c:v",
     "libx264",
     "-preset",
@@ -179,7 +185,15 @@ const buildProxyArgs = (request: ProxyRunRequest): string[] => {
     `${crf}`,
     "-pix_fmt",
     "yuv420p",
-    ...(withAudio ? ["-c:a", "aac", "-b:a", "128k"] : ["-an"]),
+    ...(withAudio
+      ? [
+          ...(reverse ? ["-af", "areverse"] : []),
+          "-c:a",
+          "aac",
+          "-b:a",
+          "128k",
+        ]
+      : ["-an"]),
     "-movflags",
     "+faststart",
     request.outputPath,
