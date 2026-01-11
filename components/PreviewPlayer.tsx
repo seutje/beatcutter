@@ -17,6 +17,8 @@ const PreviewPlayer: React.FC<PreviewPlayerProps> = ({ playbackState, videoTrack
     const renderLoopRef = useRef<number>(0);
     const timeRef = useRef<number>(0);
     const trackRef = useRef<TimelineTrack | undefined>(undefined);
+    const lastSegmentIdRef = useRef<string | null>(null);
+    const lastSourceUrlRef = useRef<string | null>(null);
     const [isFullscreen, setIsFullscreen] = useState(false);
 
     useEffect(() => {
@@ -115,8 +117,10 @@ const PreviewPlayer: React.FC<PreviewPlayerProps> = ({ playbackState, videoTrack
             // Check if source changed
             const currentClipId = player.getAttribute('data-clip-id');
             const currentClipUrl = player.getAttribute('data-clip-url');
+            const segmentChanged = lastSegmentIdRef.current !== currentSegment.id;
+            const sourceChanged = currentClipId !== sourceClip.id || currentClipUrl !== sourceUrl;
             
-            if (currentClipId !== sourceClip.id || currentClipUrl !== sourceUrl) {
+            if (sourceChanged) {
                 player.src = sourceUrl;
                 player.setAttribute('data-clip-id', sourceClip.id);
                 player.setAttribute('data-clip-url', sourceUrl);
@@ -128,7 +132,8 @@ const PreviewPlayer: React.FC<PreviewPlayerProps> = ({ playbackState, videoTrack
                 const durationSec = Number.isFinite(player.duration) && player.duration > 0 ? player.duration : null;
                 const clampedTarget = durationSec ? Math.min(targetSourceTime, Math.max(0, durationSec - 0.05)) : targetSourceTime;
                 const timeDiff = Math.abs(player.currentTime - clampedTarget);
-                if (timeDiff > 0.2 || !playbackState.isPlaying) {
+                const driftTolerance = playbackState.isPlaying ? 0.5 : 0;
+                if (segmentChanged || sourceChanged || timeDiff > driftTolerance || !playbackState.isPlaying) {
                     try {
                         player.currentTime = clampedTarget;
                     } catch (e) {
@@ -165,6 +170,9 @@ const PreviewPlayer: React.FC<PreviewPlayerProps> = ({ playbackState, videoTrack
                 }
                 if (!player.paused) player.pause();
             }
+
+            lastSegmentIdRef.current = currentSegment.id;
+            lastSourceUrlRef.current = sourceUrl;
         }
 
     }, [playbackState.currentTime, playbackState.isPlaying, videoTrack, clips, getClipUrl]);

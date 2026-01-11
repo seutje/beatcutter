@@ -1216,6 +1216,7 @@ const App: React.FC = () => {
                   : requestedRate;
               const effectiveRate = Math.min(requestedRate, maxRate);
               const speedRate = Number.isFinite(effectiveRate) && effectiveRate > 0 ? effectiveRate : 1;
+              const speedFactor = 1 / speedRate;
               const durationSec = Math.max(0.001, (segment.duration * speedRate) / 1000);
               const fadeFilters: string[] = [];
               const fadeIn = segment.fadeIn ?? defaultFadeIn;
@@ -1241,7 +1242,7 @@ const App: React.FC = () => {
                   fadeFilters.push(`fade=t=out:st=${stSec.toFixed(3)}:d=${dSec.toFixed(3)}`);
               }
               const reverseFilter = segment.reverse ? ',reverse' : '';
-              const speedFilter = `,setpts=PTS-STARTPTS/${speedRate.toFixed(4)}`;
+              const speedFilter = `,setpts=PTS-STARTPTS*${speedFactor.toFixed(4)}`;
               const fadeSuffix = fadeFilters.length > 0 ? `,${fadeFilters.join(',')}` : '';
               filterParts.push(
                   `[${input.index}:v]trim=start=${startSec.toFixed(3)}:duration=${durationSec.toFixed(3)},` +
