@@ -1242,7 +1242,7 @@ const App: React.FC = () => {
                   fadeFilters.push(`fade=t=out:st=${stSec.toFixed(3)}:d=${dSec.toFixed(3)}`);
               }
               const reverseFilter = segment.reverse ? ',reverse' : '';
-              const speedFilter = `,setpts=PTS-STARTPTS*${speedFactor.toFixed(4)}`;
+              const speedFilter = `,setpts=(PTS-STARTPTS)*${speedFactor.toFixed(4)}`;
               const fadeSuffix = fadeFilters.length > 0 ? `,${fadeFilters.join(',')}` : '';
               filterParts.push(
                   `[${input.index}:v]trim=start=${startSec.toFixed(3)}:duration=${durationSec.toFixed(3)},` +
