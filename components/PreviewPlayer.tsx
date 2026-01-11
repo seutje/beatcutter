@@ -98,11 +98,16 @@ const PreviewPlayer: React.FC<PreviewPlayerProps> = ({ playbackState, videoTrack
             0,
             Math.min(currentSegment.duration, currentTime - currentSegment.timelineStart)
         );
+        const requestedRate = typeof currentSegment.playbackRate === 'number' && Number.isFinite(currentSegment.playbackRate)
+            ? Math.max(0.05, currentSegment.playbackRate)
+            : 1;
         const availableDuration = Math.max(0, sourceClip.duration - currentSegment.sourceStartOffset);
-        const needsStretch = availableDuration > 0 && currentSegment.duration > availableDuration;
-        const stretchRate = needsStretch ? availableDuration / currentSegment.duration : 1;
+        const maxRate = availableDuration > 0 && currentSegment.duration > 0
+            ? availableDuration / currentSegment.duration
+            : requestedRate;
+        const effectiveRate = Math.min(requestedRate, maxRate);
         const effectiveOffset = isReverse ? currentSegment.duration - offsetInSegment : offsetInSegment;
-        const targetSourceTime = (currentSegment.sourceStartOffset + effectiveOffset * stretchRate) / 1000;
+        const targetSourceTime = (currentSegment.sourceStartOffset + effectiveOffset * effectiveRate) / 1000;
 
         const player = playerARef.current;
         
@@ -147,16 +152,16 @@ const PreviewPlayer: React.FC<PreviewPlayerProps> = ({ playbackState, videoTrack
                     player.pause();
                 }
             } else if (playbackState.isPlaying) {
-                if (player.playbackRate !== stretchRate) {
-                    player.playbackRate = stretchRate;
+                if (player.playbackRate !== effectiveRate) {
+                    player.playbackRate = effectiveRate;
                 }
                 // Ensure playing
                 if (player.paused) {
                     player.play().catch(e => console.warn("Auto-play prevented or error:", e));
                 }
             } else {
-                if (player.playbackRate !== stretchRate) {
-                    player.playbackRate = stretchRate;
+                if (player.playbackRate !== effectiveRate) {
+                    player.playbackRate = effectiveRate;
                 }
                 if (!player.paused) player.pause();
             }

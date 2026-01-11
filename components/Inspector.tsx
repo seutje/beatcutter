@@ -102,6 +102,10 @@ const Inspector: React.FC<InspectorProps> = ({
     const durationBars = barDurationMs > 0 ? segment.duration / barDurationMs : 0;
     const fadeIn = segment.fadeIn ?? defaultFadeIn;
     const fadeOut = segment.fadeOut ?? defaultFadeOut;
+    const playbackRate = typeof segment.playbackRate === 'number' && Number.isFinite(segment.playbackRate)
+        ? segment.playbackRate
+        : 1;
+    const playbackPercent = Math.round(playbackRate * 100);
     const formatSec = (ms: number, fallback: number) =>
         Number.isFinite(ms) ? Number((ms / 1000).toFixed(2)) : fallback;
     const updateFade = (key: 'fadeIn' | 'fadeOut', updates: Partial<FadeRange>) => {
@@ -123,6 +127,11 @@ const Inspector: React.FC<InspectorProps> = ({
             duration: clampedDuration,
             sourceStartOffset: clampedOffset
         });
+    };
+    const updatePlaybackRate = (value: number) => {
+        if (!Number.isFinite(value)) return;
+        const clampedPercent = Math.max(5, value);
+        onUpdateSegment(segment.id, { playbackRate: clampedPercent / 100 });
     };
 
     return (
@@ -349,14 +358,27 @@ const Inspector: React.FC<InspectorProps> = ({
                 {sourceClip.type === 'video' && (
                     <div>
                         <label className="block text-xs text-stone-500 mb-2 uppercase">Playback</label>
-                        <div className="flex items-center justify-between rounded border border-stone-800 bg-stone-900/40 px-3 py-2">
-                            <span className="text-xs font-semibold text-stone-300 uppercase tracking-wide">Reverse</span>
-                            <input
-                                type="checkbox"
-                                checked={Boolean(segment.reverse)}
-                                onChange={(e) => onUpdateSegment(segment.id, { reverse: e.target.checked })}
-                                className="h-4 w-4 accent-amber-500"
-                            />
+                        <div className="space-y-3">
+                            <label className="block text-xs text-stone-400">
+                                Speed (%)
+                                <input
+                                    type="number"
+                                    min={5}
+                                    step={1}
+                                    value={Number.isFinite(playbackPercent) ? playbackPercent : 100}
+                                    onChange={(e) => updatePlaybackRate(Number(e.target.value))}
+                                    className="mt-1 w-full bg-stone-800 border border-stone-700 rounded px-2 py-1 text-sm text-stone-200"
+                                />
+                            </label>
+                            <div className="flex items-center justify-between rounded border border-stone-800 bg-stone-900/40 px-3 py-2">
+                                <span className="text-xs font-semibold text-stone-300 uppercase tracking-wide">Reverse</span>
+                                <input
+                                    type="checkbox"
+                                    checked={Boolean(segment.reverse)}
+                                    onChange={(e) => onUpdateSegment(segment.id, { reverse: e.target.checked })}
+                                    className="h-4 w-4 accent-amber-500"
+                                />
+                            </div>
                         </div>
                     </div>
                 )}

@@ -282,6 +282,7 @@ const App: React.FC = () => {
                             timelineStart: 0,
                             duration: buffer.duration * 1000,
                             sourceStartOffset: 0,
+                            playbackRate: 1,
                             fadeIn: { ...defaultFadeIn },
                             fadeOut: { ...defaultFadeOut }
                         }]
@@ -754,6 +755,7 @@ const App: React.FC = () => {
               timelineStart,
               duration: durationMs,
               sourceStartOffset: 0,
+              playbackRate: 1,
               reverse: false,
               fadeIn: { ...defaultFadeIn },
               fadeOut: { ...defaultFadeOut }
@@ -1202,8 +1204,19 @@ const App: React.FC = () => {
           sortedSegments.forEach((segment, idx) => {
               const input = inputMap.get(segment.sourceClipId);
               if (!input) return;
+              const clip = clips.find(c => c.id === segment.sourceClipId);
+              if (!clip) return;
               const startSec = segment.sourceStartOffset / 1000;
-              const durationSec = segment.duration / 1000;
+              const requestedRate = typeof segment.playbackRate === 'number' && Number.isFinite(segment.playbackRate)
+                  ? Math.max(0.05, segment.playbackRate)
+                  : 1;
+              const availableDuration = Math.max(0, clip.duration - segment.sourceStartOffset);
+              const maxRate = availableDuration > 0 && segment.duration > 0
+                  ? availableDuration / segment.duration
+                  : requestedRate;
+              const effectiveRate = Math.min(requestedRate, maxRate);
+              const speedRate = Number.isFinite(effectiveRate) && effectiveRate > 0 ? effectiveRate : 1;
+              const durationSec = Math.max(0.001, (segment.duration * speedRate) / 1000);
               const fadeFilters: string[] = [];
               const fadeIn = segment.fadeIn ?? defaultFadeIn;
               if (fadeIn.enabled) {
@@ -1227,11 +1240,12 @@ const App: React.FC = () => {
                   const dSec = Math.max(durationMs / 1000, 0.001);
                   fadeFilters.push(`fade=t=out:st=${stSec.toFixed(3)}:d=${dSec.toFixed(3)}`);
               }
-              const reverseFilter = segment.reverse ? ',reverse,setpts=PTS-STARTPTS' : '';
+              const reverseFilter = segment.reverse ? ',reverse' : '';
+              const speedFilter = `,setpts=PTS-STARTPTS/${speedRate.toFixed(4)}`;
               const fadeSuffix = fadeFilters.length > 0 ? `,${fadeFilters.join(',')}` : '';
               filterParts.push(
                   `[${input.index}:v]trim=start=${startSec.toFixed(3)}:duration=${durationSec.toFixed(3)},` +
-                  `setpts=PTS-STARTPTS${reverseFilter},scale=${targetWidth}:${targetHeight}:flags=fast_bilinear` +
+                  `${reverseFilter}${speedFilter},scale=${targetWidth}:${targetHeight}:flags=fast_bilinear` +
                   `${fadeSuffix}[v${idx}]`
               );
               concatInputs.push(`[v${idx}]`);
