@@ -80,6 +80,7 @@ export const autoSyncClips = (
             timelineStart: startTime,
             duration: duration,
             sourceStartOffset: sourceStartOffset,
+            reverse: false,
             fadeIn: { ...defaultFadeIn },
             fadeOut: { ...defaultFadeOut }
         });

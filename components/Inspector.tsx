@@ -348,6 +348,21 @@ const Inspector: React.FC<InspectorProps> = ({
 
                 {sourceClip.type === 'video' && (
                     <div>
+                        <label className="block text-xs text-stone-500 mb-2 uppercase">Playback</label>
+                        <div className="flex items-center justify-between rounded border border-stone-800 bg-stone-900/40 px-3 py-2">
+                            <span className="text-xs font-semibold text-stone-300 uppercase tracking-wide">Reverse</span>
+                            <input
+                                type="checkbox"
+                                checked={Boolean(segment.reverse)}
+                                onChange={(e) => onUpdateSegment(segment.id, { reverse: e.target.checked })}
+                                className="h-4 w-4 accent-amber-500"
+                            />
+                        </div>
+                    </div>
+                )}
+
+                {sourceClip.type === 'video' && (
+                    <div>
                         <label className="block text-xs text-stone-500 mb-2 uppercase">Slip (Source Offset)</label>
                         <div className="space-y-2">
                             <div className="flex justify-between text-xs text-stone-400">

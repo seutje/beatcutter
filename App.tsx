@@ -754,6 +754,7 @@ const App: React.FC = () => {
               timelineStart,
               duration: durationMs,
               sourceStartOffset: 0,
+              reverse: false,
               fadeIn: { ...defaultFadeIn },
               fadeOut: { ...defaultFadeOut }
           };
@@ -1226,10 +1227,11 @@ const App: React.FC = () => {
                   const dSec = Math.max(durationMs / 1000, 0.001);
                   fadeFilters.push(`fade=t=out:st=${stSec.toFixed(3)}:d=${dSec.toFixed(3)}`);
               }
+              const reverseFilter = segment.reverse ? ',reverse,setpts=PTS-STARTPTS' : '';
               const fadeSuffix = fadeFilters.length > 0 ? `,${fadeFilters.join(',')}` : '';
               filterParts.push(
                   `[${input.index}:v]trim=start=${startSec.toFixed(3)}:duration=${durationSec.toFixed(3)},` +
-                  `setpts=PTS-STARTPTS,scale=${targetWidth}:${targetHeight}:flags=fast_bilinear` +
+                  `setpts=PTS-STARTPTS${reverseFilter},scale=${targetWidth}:${targetHeight}:flags=fast_bilinear` +
                   `${fadeSuffix}[v${idx}]`
               );
               concatInputs.push(`[v${idx}]`);

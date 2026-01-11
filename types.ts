@@ -19,6 +19,7 @@ export interface ClipSegment {
   duration: TimeMS;
   // Source content selection (The "Slip")
   sourceStartOffset: TimeMS;
+  reverse?: boolean;
   fadeIn?: FadeRange;
   fadeOut?: FadeRange;
 }

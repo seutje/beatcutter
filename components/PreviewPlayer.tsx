@@ -93,11 +93,16 @@ const PreviewPlayer: React.FC<PreviewPlayerProps> = ({ playbackState, videoTrack
 
         // Calculate the seek time within the source file.
         // If the segment duration exceeds the remaining clip duration, slow playback to fit.
-        const offsetInSegment = currentTime - currentSegment.timelineStart;
+        const isReverse = Boolean(currentSegment.reverse);
+        const offsetInSegment = Math.max(
+            0,
+            Math.min(currentSegment.duration, currentTime - currentSegment.timelineStart)
+        );
         const availableDuration = Math.max(0, sourceClip.duration - currentSegment.sourceStartOffset);
         const needsStretch = availableDuration > 0 && currentSegment.duration > availableDuration;
         const stretchRate = needsStretch ? availableDuration / currentSegment.duration : 1;
-        const targetSourceTime = (currentSegment.sourceStartOffset + offsetInSegment * stretchRate) / 1000;
+        const effectiveOffset = isReverse ? currentSegment.duration - offsetInSegment : offsetInSegment;
+        const targetSourceTime = (currentSegment.sourceStartOffset + effectiveOffset * stretchRate) / 1000;
 
         const player = playerARef.current;
         
@@ -134,7 +139,14 @@ const PreviewPlayer: React.FC<PreviewPlayerProps> = ({ playbackState, videoTrack
                 player.onloadedmetadata = seekToTarget;
             }
 
-            if (playbackState.isPlaying) {
+            if (isReverse) {
+                if (player.playbackRate !== 1) {
+                    player.playbackRate = 1;
+                }
+                if (!player.paused) {
+                    player.pause();
+                }
+            } else if (playbackState.isPlaying) {
                 if (player.playbackRate !== stretchRate) {
                     player.playbackRate = stretchRate;
                 }
