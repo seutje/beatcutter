@@ -1241,12 +1241,16 @@ const App: React.FC = () => {
                   const dSec = Math.max(durationMs / 1000, 0.001);
                   fadeFilters.push(`fade=t=out:st=${stSec.toFixed(3)}:d=${dSec.toFixed(3)}`);
               }
-              const reverseFilter = segment.reverse ? ',reverse' : '';
-              const speedFilter = `,setpts=(PTS-STARTPTS)*${speedFactor.toFixed(4)}`;
+              const filterChain = [
+                  `trim=start=${startSec.toFixed(3)}:duration=${durationSec.toFixed(3)}`
+              ];
+              if (segment.reverse) {
+                  filterChain.push('reverse');
+              }
+              filterChain.push(`setpts=(PTS-STARTPTS)*${speedFactor.toFixed(4)}`);
               const fadeSuffix = fadeFilters.length > 0 ? `,${fadeFilters.join(',')}` : '';
               filterParts.push(
-                  `[${input.index}:v]trim=start=${startSec.toFixed(3)}:duration=${durationSec.toFixed(3)},` +
-                  `${reverseFilter}${speedFilter},scale=${targetWidth}:${targetHeight}:flags=fast_bilinear` +
+                  `[${input.index}:v]${filterChain.join(',')},scale=${targetWidth}:${targetHeight}:flags=fast_bilinear` +
                   `${fadeSuffix}[v${idx}]`
               );
               concatInputs.push(`[v${idx}]`);
