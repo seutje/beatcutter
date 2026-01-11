@@ -110,6 +110,7 @@ const PreviewPlayer: React.FC<PreviewPlayerProps> = ({ playbackState, videoTrack
         const effectiveRate = Math.min(requestedRate, maxRate);
         const effectiveOffset = isReverse ? currentSegment.duration - offsetInSegment : offsetInSegment;
         const targetSourceTime = (currentSegment.sourceStartOffset + effectiveOffset * effectiveRate) / 1000;
+        const appliedRate = Math.min(4, Math.max(0.5, effectiveRate));
 
         const player = playerARef.current;
         
@@ -157,16 +158,16 @@ const PreviewPlayer: React.FC<PreviewPlayerProps> = ({ playbackState, videoTrack
                     player.pause();
                 }
             } else if (playbackState.isPlaying) {
-                if (player.playbackRate !== effectiveRate) {
-                    player.playbackRate = effectiveRate;
+                if (player.playbackRate !== appliedRate) {
+                    player.playbackRate = appliedRate;
                 }
                 // Ensure playing
                 if (player.paused) {
                     player.play().catch(e => console.warn("Auto-play prevented or error:", e));
                 }
             } else {
-                if (player.playbackRate !== effectiveRate) {
-                    player.playbackRate = effectiveRate;
+                if (player.playbackRate !== appliedRate) {
+                    player.playbackRate = appliedRate;
                 }
                 if (!player.paused) player.pause();
             }
