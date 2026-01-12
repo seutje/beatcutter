@@ -1379,8 +1379,8 @@ const App: React.FC = () => {
                   ? `,tpad=start_duration=${formatSec(gapSec)}:start_mode=add:color=black`
                   : '';
               filterParts.push(
-                  `[${input.index}:v]${filterChain.join(',')},scale=${targetWidth}:${targetHeight}:flags=fast_bilinear` +
-                  `${fadeSuffix}${gapSuffix}[v${idx}]`
+                  `[${input.index}:v]${filterChain.join(',')},scale=${targetWidth}:${targetHeight}:flags=fast_bilinear,` +
+                  `fps=${DEFAULT_FPS}${fadeSuffix}${gapSuffix}[v${idx}]`
               );
               concatInputs.push(`[v${idx}]`);
               lastEndSec = segmentStartSec + segment.duration / 1000;
