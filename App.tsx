@@ -1325,24 +1325,17 @@ const App: React.FC = () => {
 
           const filterParts: string[] = [];
           const concatInputs: string[] = [];
-          let lastEndFrames = 0;
+          let lastEndSec = 0;
           const debugSegments: Array<Record<string, number | string | boolean>> = [];
           sortedSegments.forEach((segment, idx) => {
               const input = inputMap.get(segment.sourceClipId);
               if (!input) return;
               const clip = clips.find(c => c.id === segment.sourceClipId);
               if (!clip) return;
-              const segmentStartFrames = Math.round((segment.timelineStart / 1000) * frameRate);
-              const segmentEndFrames = Math.max(
-                  segmentStartFrames + 1,
-                  Math.round(((segment.timelineStart + segment.duration) / 1000) * frameRate)
-              );
-              const segmentFrames = segmentEndFrames - segmentStartFrames;
-              const segmentDurationMs = (segmentFrames * 1000) / frameRate;
+              const segmentStartSec = segment.timelineStart / 1000;
+              const segmentDurationMs = Math.max(0, segment.duration);
               const segmentDurationSec = segmentDurationMs / 1000;
-              const segmentStartSec = segmentStartFrames / frameRate;
-              const gapFrames = Math.max(0, segmentStartFrames - lastEndFrames);
-              const gapSec = gapFrames / frameRate;
+              const gapSec = Math.max(0, segmentStartSec - lastEndSec);
               const startSec = segment.sourceStartOffset / 1000;
               const requestedRate = typeof segment.playbackRate === 'number' && Number.isFinite(segment.playbackRate)
                   ? Math.max(0.05, segment.playbackRate)
@@ -1394,14 +1387,11 @@ const App: React.FC = () => {
                   `${fadeSuffix}${gapSuffix}[v${idx}]`
               );
               concatInputs.push(`[v${idx}]`);
-              lastEndFrames = segmentEndFrames;
+              lastEndSec = Math.max(lastEndSec, segmentStartSec + segmentDurationSec);
               debugSegments.push({
                   idx,
                   clipId: clip.id,
                   clipName: clip.name,
-                  segmentStartFrames,
-                  segmentEndFrames,
-                  segmentFrames,
                   timelineStartSec: Number(segmentStartSec.toFixed(6)),
                   segmentDurationSec: Number(segmentDurationSec.toFixed(6)),
                   gapSec: Number(gapSec.toFixed(6)),
@@ -1432,12 +1422,12 @@ const App: React.FC = () => {
           const outputFileName = `${outputBaseStem} - ${exportTimestamp}.mp4`;
           const outputPath = joinPath(outputDir, outputFileName);
 
-          const outputDurationSec = lastEndFrames / frameRate;
+          const outputDurationSec = lastEndSec;
           const audioOffsetSec = Math.min(0, introSkipFrames) / DEFAULT_FPS;
           const audioDelayMs = audioOffsetSec < 0 ? Math.round(-audioOffsetSec * 1000) : 0;
           const audioDelaySpec = audioDelayMs > 0 ? `${audioDelayMs}|${audioDelayMs}` : '';
           const audioDurationSec = Number.isFinite(duration) && duration > 0 ? duration / 1000 : 0;
-          const frameAligned = true;
+          const frameAligned = false;
           const outputDurationFixedSec = outputDurationSec > 0
               ? Math.round(outputDurationSec * frameRate) / frameRate
               : 0;
