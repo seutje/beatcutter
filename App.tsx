@@ -846,6 +846,12 @@ const App: React.FC = () => {
   const handleAddClipToTimeline = (clipId: string) => {
       const clip = clips.find(c => c.id === clipId);
       if (!clip || clip.type !== 'video') return;
+      const nextVideoClipId = (() => {
+          const currentIndex = clips.findIndex(c => c.id === clipId);
+          if (currentIndex === -1) return null;
+          const nextClip = clips.slice(currentIndex + 1).find(c => c.type === 'video');
+          return nextClip ? nextClip.id : null;
+      })();
       const barLengthSec = (60 / beatGrid.bpm) * BEATS_PER_BAR;
       const barDurationMs = Number.isFinite(barLengthSec) ? barLengthSec * 1000 : 0;
       const requestedBars = Number.isFinite(mediaClipBars) ? mediaClipBars : 4;
@@ -873,8 +879,15 @@ const App: React.FC = () => {
           return { ...t, segments: [...t.segments, nextSegment] };
       }));
 
-      setSelectedSegmentId(segmentId);
-      setSelectedMediaClipId(null);
+      if (nextVideoClipId) {
+          setSelectedMediaClipId(nextVideoClipId);
+          setSelectedSegmentId(null);
+          setSwapMode(false);
+          setSwapSourceId(null);
+      } else {
+          setSelectedSegmentId(segmentId);
+          setSelectedMediaClipId(null);
+      }
   };
 
   const openAutoSyncDialog = () => {
