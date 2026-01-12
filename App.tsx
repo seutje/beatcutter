@@ -1299,7 +1299,6 @@ const App: React.FC = () => {
       try {
           const formatSec = (value: number) => value.toFixed(6);
           const frameRate = DEFAULT_FPS;
-          const frameDurationSec = 1 / frameRate;
           const sortedSegments = [...videoSegments].sort((a, b) => a.timelineStart - b.timelineStart);
           for (const segment of sortedSegments) {
               const clip = clips.find(c => c.id === segment.sourceClipId);
@@ -1326,18 +1325,16 @@ const App: React.FC = () => {
 
           const filterParts: string[] = [];
           const concatInputs: string[] = [];
-          let lastEndFrames = 0;
+          let lastEndSec = 0;
           sortedSegments.forEach((segment, idx) => {
               const input = inputMap.get(segment.sourceClipId);
               if (!input) return;
               const clip = clips.find(c => c.id === segment.sourceClipId);
               if (!clip) return;
-              const segmentStartFrames = Math.round((segment.timelineStart / 1000) * frameRate);
-              const segmentFrames = Math.max(1, Math.round((segment.duration / 1000) * frameRate));
-              const segmentDurationMs = (segmentFrames * 1000) / frameRate;
-              const segmentStartSec = segmentStartFrames * frameDurationSec;
-              const gapFrames = Math.max(0, segmentStartFrames - lastEndFrames);
-              const gapSec = gapFrames * frameDurationSec;
+              const segmentDurationMs = Math.max(1, segment.duration);
+              const segmentDurationSec = segmentDurationMs / 1000;
+              const segmentStartSec = segment.timelineStart / 1000;
+              const gapSec = Math.max(0, segmentStartSec - lastEndSec);
               const startSec = segment.sourceStartOffset / 1000;
               const requestedRate = typeof segment.playbackRate === 'number' && Number.isFinite(segment.playbackRate)
                   ? Math.max(0.05, segment.playbackRate)
@@ -1389,7 +1386,7 @@ const App: React.FC = () => {
                   `${fadeSuffix}${gapSuffix}[v${idx}]`
               );
               concatInputs.push(`[v${idx}]`);
-              lastEndFrames = segmentStartFrames + segmentFrames;
+              lastEndSec = segmentStartSec + segmentDurationSec;
           });
           if (concatInputs.length === 0) {
               setExportError('No valid video segments to export. Check that clips still exist.');
@@ -1413,7 +1410,7 @@ const App: React.FC = () => {
           const outputFileName = `${outputBaseStem} - ${exportTimestamp}.mp4`;
           const outputPath = joinPath(outputDir, outputFileName);
 
-          const outputDurationSec = lastEndFrames * frameDurationSec;
+          const outputDurationSec = lastEndSec;
           const audioOffsetSec = Math.min(0, introSkipFrames) / DEFAULT_FPS;
           const outputDurationFixedSec = outputDurationSec > 0
               ? Math.round(outputDurationSec * frameRate) / frameRate
