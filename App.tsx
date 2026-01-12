@@ -1431,7 +1431,7 @@ const App: React.FC = () => {
           const outputDurationFixedSec = outputDurationSec > 0
               ? Math.round(outputDurationSec * frameRate) / frameRate
               : 0;
-          const useCfrExport = true;
+          const useCfrExport = frameAligned;
           const outputDurationTargetSec = audioDurationSec > 0
               ? audioDurationSec
               : (useCfrExport ? outputDurationFixedSec : outputDurationSec);
