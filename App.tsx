@@ -1329,6 +1329,7 @@ const App: React.FC = () => {
           let lastEndFrames = 0;
           const preferCfrExport = false;
           const forceCfrOutput = true;
+          const applyCfrPerSegment = forceCfrOutput || preferCfrExport;
           const debugSegments: Array<Record<string, number | string | boolean>> = [];
           sortedSegments.forEach((segment, idx) => {
               const input = inputMap.get(segment.sourceClipId);
@@ -1397,6 +1398,9 @@ const App: React.FC = () => {
                   filterChain.push('reverse');
               }
               filterChain.push(`setpts=(PTS-STARTPTS)*${speedFactor.toFixed(6)}`);
+              if (applyCfrPerSegment) {
+                  filterChain.push(`fps=${DEFAULT_FPS}`);
+              }
               const fadeSuffix = fadeFilters.length > 0 ? `,${fadeFilters.join(',')}` : '';
               const gapSuffix = gapSec > 0
                   ? `,tpad=start_duration=${formatSec(gapSec)}:start_mode=add:color=black`
@@ -1462,13 +1466,14 @@ const App: React.FC = () => {
               ? Math.round(outputDurationSec * frameRate) / frameRate
               : 0;
           const useCfrExport = forceCfrOutput || frameAligned;
+          const useOutputFpsFilter = useCfrExport && !applyCfrPerSegment;
           const outputDurationTargetSec = audioDurationSec > 0
               ? audioDurationSec
               : (useCfrExport ? outputDurationFixedSec : outputDurationSec);
           const videoStretch = audioDurationSec > 0 && outputDurationSec > 0
               ? audioDurationSec / outputDurationSec
               : 1;
-          const useVideoStretch = Math.abs(videoStretch - 1) > 1e-6;
+          const useVideoStretch = audioDurationSec > 0 && outputDurationSec > 0;
           const audioFilter = audioInputIndex !== null && outputDurationSec > 0
               ? (() => {
                   const filters: string[] = [];
@@ -1481,12 +1486,12 @@ const App: React.FC = () => {
                   return `;[${audioInputIndex}:a]${filters.join(',')}[outa]`;
               })()
               : '';
-          const videoTimeAdjust = useVideoStretch ? `setpts=PTS*${videoStretch.toFixed(6)},` : '';
+          const videoTimeAdjust = useVideoStretch ? `setpts=PTS*${videoStretch.toFixed(9)},` : '';
           const videoPostFilter = outputDurationTargetSec > 0
-              ? useCfrExport
+              ? useOutputFpsFilter
                   ? `;[outvraw]${videoTimeAdjust}fps=${DEFAULT_FPS},trim=duration=${formatSec(outputDurationTargetSec)}[outv]`
                   : `;[outvraw]${videoTimeAdjust}trim=duration=${formatSec(outputDurationTargetSec)}[outv]`
-              : useCfrExport
+              : useOutputFpsFilter
                   ? `;[outvraw]${videoTimeAdjust}fps=${DEFAULT_FPS}[outv]`
                   : `;[outvraw]${videoTimeAdjust}setpts=PTS-STARTPTS[outv]`;
           const filterComplex = `${filterParts.join(';')};${concatInputs.join('')}concat=n=${concatInputs.length}:v=1:a=0[outvraw]` +
@@ -1516,7 +1521,9 @@ const App: React.FC = () => {
               '-c:v', 'libx264',
               '-preset', 'ultrafast',
               '-bf', '0',
-              ...(useCfrExport ? ['-vsync', 'cfr', '-r', `${DEFAULT_FPS}`] : ['-vsync', 'vfr']),
+              ...(useCfrExport
+                  ? ['-vsync', 'cfr', '-r', `${DEFAULT_FPS}`, '-video_track_timescale', `${Math.round(DEFAULT_FPS * 1000)}`]
+                  : ['-vsync', 'vfr']),
               '-b:v', `${Math.max(1, safeMbps).toFixed(0)}M`,
               '-pix_fmt', 'yuv420p',
               '-profile:v', 'high',
@@ -1538,6 +1545,8 @@ const App: React.FC = () => {
               audioDurationSec: Number(audioDurationSec.toFixed(6)),
               videoStretch: Number(videoStretch.toFixed(6)),
               useVideoStretch,
+              applyCfrPerSegment,
+              useOutputFpsFilter,
               targetWidth,
               targetHeight,
               useCfrExport,
