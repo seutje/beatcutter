@@ -714,6 +714,18 @@ const App: React.FC = () => {
 
   const handleRemoveSegment = (id: string) => {
       let nextSelectionId: string | null = null;
+      if (selectedSegmentId === id) {
+          const trackWithTarget = tracks.find(t => t.segments.some(s => s.id === id));
+          if (trackWithTarget) {
+              const orderedSegments = [...trackWithTarget.segments].sort(
+                  (a, b) => a.timelineStart - b.timelineStart
+              );
+              const targetIndex = orderedSegments.findIndex(segment => segment.id === id);
+              if (targetIndex >= 0) {
+                  nextSelectionId = orderedSegments[targetIndex + 1]?.id ?? null;
+              }
+          }
+      }
       setTracks(prev => prev.map(t => {
           const target = t.segments.find(s => s.id === id);
           if (!target) {
@@ -722,10 +734,6 @@ const App: React.FC = () => {
           const orderedSegments = [...t.segments].sort((a, b) => a.timelineStart - b.timelineStart);
           const orderById = new Map(orderedSegments.map((segment, index) => [segment.id, index]));
           const targetIndex = orderById.get(id) ?? -1;
-          if (selectedSegmentId === id && targetIndex >= 0) {
-              const nextSegment = orderedSegments[targetIndex + 1];
-              nextSelectionId = nextSegment ? nextSegment.id : null;
-          }
           const nextSegments = t.segments
               .filter(s => s.id !== id)
               .map(s => {
