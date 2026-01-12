@@ -1327,7 +1327,7 @@ const App: React.FC = () => {
           const concatInputs: string[] = [];
           let lastEndSec = 0;
           let lastEndFrames = 0;
-          const preferCfrExport = false;
+          const preferCfrExport = forceCfrOutput;
           const forceCfrOutput = true;
           const applyCfrPerSegment = forceCfrOutput || preferCfrExport;
           const debugSegments: Array<Record<string, number | string | boolean>> = [];
