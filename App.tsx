@@ -1424,9 +1424,17 @@ const App: React.FC = () => {
 
           const outputDurationSec = lastEndSec;
           const audioOffsetSec = Math.min(0, introSkipFrames) / DEFAULT_FPS;
+          const isNearlyInteger = (value: number, epsilon = 1e-3) =>
+              Math.abs(value - Math.round(value)) <= epsilon;
+          const frameAligned = sortedSegments.every((segment) =>
+              isNearlyInteger((segment.timelineStart / 1000) * frameRate) &&
+              isNearlyInteger((segment.duration / 1000) * frameRate)
+          );
           const outputDurationFixedSec = outputDurationSec > 0
               ? Math.round(outputDurationSec * frameRate) / frameRate
               : 0;
+          const useCfrExport = frameAligned;
+          const outputDurationTargetSec = useCfrExport ? outputDurationFixedSec : outputDurationSec;
           const audioFilter = audioInputIndex !== null && outputDurationSec > 0
               ? (() => {
                   const filters: string[] = [];
@@ -1434,14 +1442,18 @@ const App: React.FC = () => {
                       filters.push(`atrim=start=${formatSec(-audioOffsetSec)}`);
                   }
                   filters.push('apad');
-                  filters.push(`atrim=0:${formatSec(outputDurationFixedSec)}`);
+                  filters.push(`atrim=0:${formatSec(outputDurationTargetSec)}`);
                   filters.push('asetpts=PTS-STARTPTS');
                   return `;[${audioInputIndex}:a]${filters.join(',')}[outa]`;
               })()
               : '';
-          const videoPostFilter = outputDurationFixedSec > 0
-              ? `;[outvraw]fps=${DEFAULT_FPS},trim=duration=${formatSec(outputDurationFixedSec)}[outv]`
-              : `;[outvraw]fps=${DEFAULT_FPS}[outv]`;
+          const videoPostFilter = outputDurationTargetSec > 0
+              ? useCfrExport
+                  ? `;[outvraw]fps=${DEFAULT_FPS},trim=duration=${formatSec(outputDurationTargetSec)}[outv]`
+                  : `;[outvraw]trim=duration=${formatSec(outputDurationTargetSec)}[outv]`
+              : useCfrExport
+                  ? `;[outvraw]fps=${DEFAULT_FPS}[outv]`
+                  : `;[outvraw]setpts=PTS-STARTPTS[outv]`;
           const filterComplex = `${filterParts.join(';')};${concatInputs.join('')}concat=n=${concatInputs.length}:v=1:a=0[outvraw]` +
               `${videoPostFilter}${audioFilter}`;
           const args: string[] = [];
@@ -1469,8 +1481,7 @@ const App: React.FC = () => {
               '-c:v', 'libx264',
               '-preset', 'ultrafast',
               '-bf', '0',
-              '-vsync', 'cfr',
-              '-r', `${DEFAULT_FPS}`,
+              ...(useCfrExport ? ['-vsync', 'cfr', '-r', `${DEFAULT_FPS}`] : ['-vsync', 'vfr']),
               '-b:v', `${Math.max(1, safeMbps).toFixed(0)}M`,
               '-pix_fmt', 'yuv420p',
               '-profile:v', 'high',
@@ -1485,9 +1496,12 @@ const App: React.FC = () => {
               outputPath,
               outputDurationSec: Number(outputDurationSec.toFixed(6)),
               outputDurationFixedSec: Number(outputDurationFixedSec.toFixed(6)),
+              outputDurationTargetSec: Number(outputDurationTargetSec.toFixed(6)),
               audioOffsetSec: Number(audioOffsetSec.toFixed(6)),
               targetWidth,
               targetHeight,
+              useCfrExport,
+              frameAligned,
               segmentCount: concatInputs.length,
               segments: debugSegments,
               filterComplex,
@@ -1500,7 +1514,7 @@ const App: React.FC = () => {
               setExportProgress(Math.min(100, Math.round(progress.progress)));
           });
 
-          const execResult = await runFfmpeg({ jobId, args, durationSec: outputDurationSec });
+          const execResult = await runFfmpeg({ jobId, args, durationSec: outputDurationTargetSec });
           if (execResult.exitCode !== 0 || execResult.signal) {
               console.error('FFmpeg export failed', execResult, { args });
               if (execResult.signal === 'SIGKILL') {
