@@ -1327,7 +1327,7 @@ const App: React.FC = () => {
           const concatInputs: string[] = [];
           let lastEndSec = 0;
           let lastEndFrames = 0;
-          const preferCfrExport = true;
+          const preferCfrExport = false;
           const debugSegments: Array<Record<string, number | string | boolean>> = [];
           sortedSegments.forEach((segment, idx) => {
               const input = inputMap.get(segment.sourceClipId);
@@ -1467,7 +1467,7 @@ const App: React.FC = () => {
           const videoStretch = audioDurationSec > 0 && outputDurationSec > 0
               ? audioDurationSec / outputDurationSec
               : 1;
-          const useVideoStretch = Math.abs(videoStretch - 1) > 1e-4;
+          const useVideoStretch = Math.abs(videoStretch - 1) > 1e-6;
           const audioFilter = audioInputIndex !== null && outputDurationSec > 0
               ? (() => {
                   const filters: string[] = [];
