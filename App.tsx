@@ -1101,21 +1101,24 @@ const App: React.FC = () => {
         try { scrubPreviewSourceRef.current.stop(); } catch(e){}
         scrubPreviewSourceRef.current = null;
     }
-
-    // Start audio if we have a master track
-    if (masterAudioBufferRef.current) {
-        // Stop previous if exists
+    const introSkipSec = Math.min(0, introSkipFrames) / DEFAULT_FPS;
+    const startAudioAt = (timelineMs: number) => {
+        if (!masterAudioBufferRef.current) return;
         if (audioSourceNodeRef.current) {
             try { audioSourceNodeRef.current.stop(); } catch(e){}
         }
-
         const source = ctx.createBufferSource();
         source.buffer = masterAudioBufferRef.current;
         source.connect(ctx.destination);
-        
-        const offsetSec = playbackState.currentTime / 1000;
+        const maxOffset = Math.max(0, source.buffer.duration - 0.05);
+        const offsetSec = Math.min(Math.max(0, timelineMs / 1000 - introSkipSec), maxOffset);
         source.start(0, offsetSec);
         audioSourceNodeRef.current = source;
+    };
+
+    // Start audio if we have a master track
+    if (masterAudioBufferRef.current) {
+        startAudioAt(playbackState.currentTime);
     }
 
     startTimeRef.current = performance.now() - playbackState.currentTime;
@@ -1132,12 +1135,7 @@ const App: React.FC = () => {
             startTimeRef.current = now;
             // Restart audio logic (simplified for loop)
             if (masterAudioBufferRef.current && audioSourceNodeRef.current) {
-                try { audioSourceNodeRef.current.stop(); } catch(e){}
-                const source = ctx.createBufferSource();
-                source.buffer = masterAudioBufferRef.current;
-                source.connect(ctx.destination);
-                source.start(0, 0);
-                audioSourceNodeRef.current = source;
+                startAudioAt(0);
             }
         }
 
@@ -1175,7 +1173,8 @@ const App: React.FC = () => {
 
       const frameSec = 1 / DEFAULT_FPS;
       const maxOffset = Math.max(0, source.buffer.duration - frameSec);
-      const offsetSec = Math.min(Math.max(0, timeMs / 1000), maxOffset);
+      const introSkipSec = Math.min(0, introSkipFrames) / DEFAULT_FPS;
+      const offsetSec = Math.min(Math.max(0, timeMs / 1000 - introSkipSec), maxOffset);
       source.start(0, offsetSec, frameSec);
 
       scrubPreviewSourceRef.current = source;
@@ -1411,8 +1410,18 @@ const App: React.FC = () => {
               const end = (segment.timelineStart + segment.duration) / 1000;
               return Math.max(max, end);
           }, 0);
+          const audioOffsetSec = Math.min(0, introSkipFrames) / DEFAULT_FPS;
           const audioFilter = audioInputIndex !== null && outputDurationSec > 0
-              ? `;[${audioInputIndex}:a]apad,atrim=0:${outputDurationSec.toFixed(3)},asetpts=PTS-STARTPTS[outa]`
+              ? (() => {
+                  const filters: string[] = [];
+                  if (audioOffsetSec < 0) {
+                      filters.push(`atrim=start=${(-audioOffsetSec).toFixed(3)}`);
+                  }
+                  filters.push('apad');
+                  filters.push(`atrim=0:${outputDurationSec.toFixed(3)}`);
+                  filters.push('asetpts=PTS-STARTPTS');
+                  return `;[${audioInputIndex}:a]${filters.join(',')}[outa]`;
+              })()
               : '';
           const filterComplex = `${filterParts.join(';')};${concatInputs.join('')}concat=n=${concatInputs.length}:v=1:a=0[outv]${audioFilter}`;
           const args: string[] = [];
