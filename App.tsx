@@ -1424,6 +1424,7 @@ const App: React.FC = () => {
 
           const outputDurationSec = lastEndSec;
           const audioOffsetSec = Math.min(0, introSkipFrames) / DEFAULT_FPS;
+          const audioDelayMs = audioOffsetSec < 0 ? Math.round(-audioOffsetSec * 1000) : 0;
           const isNearlyInteger = (value: number, epsilon = 1e-3) =>
               Math.abs(value - Math.round(value)) <= epsilon;
           const frameAligned = sortedSegments.every((segment) =>
@@ -1438,8 +1439,8 @@ const App: React.FC = () => {
           const audioFilter = audioInputIndex !== null && outputDurationSec > 0
               ? (() => {
                   const filters: string[] = [];
-                  if (audioOffsetSec < 0) {
-                      filters.push(`atrim=start=${formatSec(-audioOffsetSec)}`);
+                  if (audioDelayMs > 0) {
+                      filters.push(`adelay=${audioDelayMs}`);
                   }
                   filters.push('apad');
                   filters.push(`atrim=0:${formatSec(outputDurationTargetSec)}`);
@@ -1498,6 +1499,7 @@ const App: React.FC = () => {
               outputDurationFixedSec: Number(outputDurationFixedSec.toFixed(6)),
               outputDurationTargetSec: Number(outputDurationTargetSec.toFixed(6)),
               audioOffsetSec: Number(audioOffsetSec.toFixed(6)),
+              audioDelayMs,
               targetWidth,
               targetHeight,
               useCfrExport,
