@@ -1327,8 +1327,8 @@ const App: React.FC = () => {
           const concatInputs: string[] = [];
           let lastEndSec = 0;
           let lastEndFrames = 0;
-          const preferCfrExport = forceCfrOutput;
           const forceCfrOutput = true;
+          const preferCfrExport = forceCfrOutput;
           const applyCfrPerSegment = forceCfrOutput || preferCfrExport;
           const debugSegments: Array<Record<string, number | string | boolean>> = [];
           sortedSegments.forEach((segment, idx) => {
