@@ -1328,6 +1328,7 @@ const App: React.FC = () => {
           let lastEndSec = 0;
           let lastEndFrames = 0;
           const preferCfrExport = false;
+          const forceCfrOutput = true;
           const debugSegments: Array<Record<string, number | string | boolean>> = [];
           sortedSegments.forEach((segment, idx) => {
               const input = inputMap.get(segment.sourceClipId);
@@ -1460,10 +1461,10 @@ const App: React.FC = () => {
           const outputDurationFixedSec = outputDurationSec > 0
               ? Math.round(outputDurationSec * frameRate) / frameRate
               : 0;
-          const useCfrExport = preferCfrExport;
-          const outputDurationTargetSec = useCfrExport
-              ? outputDurationFixedSec
-              : (audioDurationSec > 0 ? audioDurationSec : outputDurationSec);
+          const useCfrExport = forceCfrOutput || frameAligned;
+          const outputDurationTargetSec = audioDurationSec > 0
+              ? audioDurationSec
+              : (useCfrExport ? outputDurationFixedSec : outputDurationSec);
           const videoStretch = audioDurationSec > 0 && outputDurationSec > 0
               ? audioDurationSec / outputDurationSec
               : 1;
