@@ -1473,7 +1473,7 @@ const App: React.FC = () => {
           const videoStretch = audioDurationSec > 0 && outputDurationSec > 0
               ? audioDurationSec / outputDurationSec
               : 1;
-          const useVideoStretch = !preferCfrExport && audioDurationSec > 0 && outputDurationSec > 0;
+          const useVideoStretch = audioDurationSec > 0 && outputDurationSec > 0;
           const audioFilter = audioInputIndex !== null && outputDurationSec > 0
               ? (() => {
                   const filters: string[] = [];
