@@ -1440,7 +1440,7 @@ const App: React.FC = () => {
               ? (() => {
                   const filters: string[] = [];
                   if (audioDelayMs > 0) {
-                      filters.push(`adelay=${audioDelayMs}`);
+                      filters.push(`adelay=${audioDelayMs}:all=1`);
                   }
                   filters.push('apad');
                   filters.push(`atrim=0:${formatSec(outputDurationTargetSec)}`);
