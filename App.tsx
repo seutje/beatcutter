@@ -1379,8 +1379,8 @@ const App: React.FC = () => {
                   ? `,tpad=start_duration=${formatSec(gapSec)}:start_mode=add:color=black`
                   : '';
               filterParts.push(
-                  `[${input.index}:v]${filterChain.join(',')},scale=${targetWidth}:${targetHeight}:flags=fast_bilinear,` +
-                  `fps=${DEFAULT_FPS}${fadeSuffix}${gapSuffix}[v${idx}]`
+                  `[${input.index}:v]${filterChain.join(',')},scale=${targetWidth}:${targetHeight}:flags=fast_bilinear` +
+                  `${fadeSuffix}${gapSuffix}[v${idx}]`
               );
               concatInputs.push(`[v${idx}]`);
               lastEndSec = segmentStartSec + segment.duration / 1000;
@@ -1412,6 +1412,9 @@ const App: React.FC = () => {
               return Math.max(max, end);
           }, 0);
           const audioOffsetSec = Math.min(0, introSkipFrames) / DEFAULT_FPS;
+          const outputDurationFixedSec = outputDurationSec > 0
+              ? Math.round(outputDurationSec * DEFAULT_FPS) / DEFAULT_FPS
+              : 0;
           const audioFilter = audioInputIndex !== null && outputDurationSec > 0
               ? (() => {
                   const filters: string[] = [];
@@ -1419,12 +1422,16 @@ const App: React.FC = () => {
                       filters.push(`atrim=start=${formatSec(-audioOffsetSec)}`);
                   }
                   filters.push('apad');
-                  filters.push(`atrim=0:${formatSec(outputDurationSec)}`);
+                  filters.push(`atrim=0:${formatSec(outputDurationFixedSec)}`);
                   filters.push('asetpts=PTS-STARTPTS');
                   return `;[${audioInputIndex}:a]${filters.join(',')}[outa]`;
               })()
               : '';
-          const filterComplex = `${filterParts.join(';')};${concatInputs.join('')}concat=n=${concatInputs.length}:v=1:a=0[outv]${audioFilter}`;
+          const videoPostFilter = outputDurationFixedSec > 0
+              ? `;[outvraw]fps=${DEFAULT_FPS},trim=duration=${formatSec(outputDurationFixedSec)}[outv]`
+              : `;[outvraw]fps=${DEFAULT_FPS}[outv]`;
+          const filterComplex = `${filterParts.join(';')};${concatInputs.join('')}concat=n=${concatInputs.length}:v=1:a=0[outvraw]` +
+              `${videoPostFilter}${audioFilter}`;
           const args: string[] = [];
           const is4kExport = targetWidth >= 3840 || targetHeight >= 2160;
           args.push('-loglevel', 'info');
