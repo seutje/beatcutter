@@ -1297,6 +1297,7 @@ const App: React.FC = () => {
       let unsubscribeProgress: (() => void) | null = null;
       const jobId = uuidv4();
       try {
+          const formatSec = (value: number) => value.toFixed(6);
           const sortedSegments = [...videoSegments].sort((a, b) => a.timelineStart - b.timelineStart);
           for (const segment of sortedSegments) {
               const clip = clips.find(c => c.id === segment.sourceClipId);
@@ -1351,7 +1352,7 @@ const App: React.FC = () => {
                   const durationMs = end - start;
                   const stSec = (durationMs > 0 ? start : end) / 1000;
                   const dSec = Math.max(durationMs / 1000, 0.001);
-                  fadeFilters.push(`fade=t=in:st=${stSec.toFixed(3)}:d=${dSec.toFixed(3)}`);
+                  fadeFilters.push(`fade=t=in:st=${formatSec(stSec)}:d=${formatSec(dSec)}`);
               }
               const fadeOut = segment.fadeOut ?? defaultFadeOut;
               if (fadeOut.enabled) {
@@ -1364,18 +1365,18 @@ const App: React.FC = () => {
                   const durationMs = end - start;
                   const stSec = (durationMs > 0 ? start : end) / 1000;
                   const dSec = Math.max(durationMs / 1000, 0.001);
-                  fadeFilters.push(`fade=t=out:st=${stSec.toFixed(3)}:d=${dSec.toFixed(3)}`);
+                  fadeFilters.push(`fade=t=out:st=${formatSec(stSec)}:d=${formatSec(dSec)}`);
               }
               const filterChain = [
-                  `trim=start=${startSec.toFixed(3)}:duration=${durationSec.toFixed(3)}`
+                  `trim=start=${formatSec(startSec)}:duration=${formatSec(durationSec)}`
               ];
               if (segment.reverse) {
                   filterChain.push('reverse');
               }
-              filterChain.push(`setpts=(PTS-STARTPTS)*${speedFactor.toFixed(4)}`);
+              filterChain.push(`setpts=(PTS-STARTPTS)*${speedFactor.toFixed(6)}`);
               const fadeSuffix = fadeFilters.length > 0 ? `,${fadeFilters.join(',')}` : '';
               const gapSuffix = gapSec > 0
-                  ? `,tpad=start_duration=${gapSec.toFixed(3)}:start_mode=add:color=black`
+                  ? `,tpad=start_duration=${formatSec(gapSec)}:start_mode=add:color=black`
                   : '';
               filterParts.push(
                   `[${input.index}:v]${filterChain.join(',')},scale=${targetWidth}:${targetHeight}:flags=fast_bilinear` +
@@ -1415,10 +1416,10 @@ const App: React.FC = () => {
               ? (() => {
                   const filters: string[] = [];
                   if (audioOffsetSec < 0) {
-                      filters.push(`atrim=start=${(-audioOffsetSec).toFixed(3)}`);
+                      filters.push(`atrim=start=${formatSec(-audioOffsetSec)}`);
                   }
                   filters.push('apad');
-                  filters.push(`atrim=0:${outputDurationSec.toFixed(3)}`);
+                  filters.push(`atrim=0:${formatSec(outputDurationSec)}`);
                   filters.push('asetpts=PTS-STARTPTS');
                   return `;[${audioInputIndex}:a]${filters.join(',')}[outa]`;
               })()
