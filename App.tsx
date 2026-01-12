@@ -1324,11 +1324,14 @@ const App: React.FC = () => {
 
           const filterParts: string[] = [];
           const concatInputs: string[] = [];
+          let lastEndSec = 0;
           sortedSegments.forEach((segment, idx) => {
               const input = inputMap.get(segment.sourceClipId);
               if (!input) return;
               const clip = clips.find(c => c.id === segment.sourceClipId);
               if (!clip) return;
+              const segmentStartSec = segment.timelineStart / 1000;
+              const gapSec = Math.max(0, segmentStartSec - lastEndSec);
               const startSec = segment.sourceStartOffset / 1000;
               const requestedRate = typeof segment.playbackRate === 'number' && Number.isFinite(segment.playbackRate)
                   ? Math.max(0.05, segment.playbackRate)
@@ -1372,11 +1375,15 @@ const App: React.FC = () => {
               }
               filterChain.push(`setpts=(PTS-STARTPTS)*${speedFactor.toFixed(4)}`);
               const fadeSuffix = fadeFilters.length > 0 ? `,${fadeFilters.join(',')}` : '';
+              const gapSuffix = gapSec > 0
+                  ? `,tpad=start_duration=${gapSec.toFixed(3)}:start_mode=add:color=black`
+                  : '';
               filterParts.push(
                   `[${input.index}:v]${filterChain.join(',')},scale=${targetWidth}:${targetHeight}:flags=fast_bilinear` +
-                  `${fadeSuffix}[v${idx}]`
+                  `${fadeSuffix}${gapSuffix}[v${idx}]`
               );
               concatInputs.push(`[v${idx}]`);
+              lastEndSec = segmentStartSec + segment.duration / 1000;
           });
           if (concatInputs.length === 0) {
               setExportError('No valid video segments to export. Check that clips still exist.');
