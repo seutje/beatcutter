@@ -1326,6 +1326,7 @@ const App: React.FC = () => {
           const filterParts: string[] = [];
           const concatInputs: string[] = [];
           let lastEndSec = 0;
+          const debugSegments: Array<Record<string, number | string | boolean>> = [];
           sortedSegments.forEach((segment, idx) => {
               const input = inputMap.get(segment.sourceClipId);
               if (!input) return;
@@ -1387,6 +1388,17 @@ const App: React.FC = () => {
               );
               concatInputs.push(`[v${idx}]`);
               lastEndSec = segmentStartSec + segmentDurationSec;
+              debugSegments.push({
+                  idx,
+                  clipId: clip.id,
+                  clipName: clip.name,
+                  timelineStartSec: Number(segmentStartSec.toFixed(6)),
+                  segmentDurationSec: Number(segmentDurationSec.toFixed(6)),
+                  gapSec: Number(gapSec.toFixed(6)),
+                  sourceStartSec: Number(startSec.toFixed(6)),
+                  playbackRate: Number(speedRate.toFixed(6)),
+                  reverse: Boolean(segment.reverse),
+              });
           });
           if (concatInputs.length === 0) {
               setExportError('No valid video segments to export. Check that clips still exist.');
@@ -1467,6 +1479,20 @@ const App: React.FC = () => {
               '-movflags', '+faststart',
               outputPath
           );
+
+          console.info('Export debug', {
+              jobId,
+              outputPath,
+              outputDurationSec: Number(outputDurationSec.toFixed(6)),
+              outputDurationFixedSec: Number(outputDurationFixedSec.toFixed(6)),
+              audioOffsetSec: Number(audioOffsetSec.toFixed(6)),
+              targetWidth,
+              targetHeight,
+              segmentCount: concatInputs.length,
+              segments: debugSegments,
+              filterComplex,
+              args,
+          });
 
           unsubscribeProgress = onFfmpegProgress((progress) => {
               if (progress.jobId !== jobId) return;
