@@ -1436,12 +1436,19 @@ const App: React.FC = () => {
           const audioOffsetSec = Math.min(0, introSkipFrames) / DEFAULT_FPS;
           const audioDelayMs = audioOffsetSec < 0 ? Math.round(-audioOffsetSec * 1000) : 0;
           const audioDelaySpec = audioDelayMs > 0 ? `${audioDelayMs}|${audioDelayMs}` : '';
+          const audioDurationSec = Number.isFinite(duration) && duration > 0 ? duration / 1000 : 0;
           const frameAligned = true;
           const outputDurationFixedSec = outputDurationSec > 0
               ? Math.round(outputDurationSec * frameRate) / frameRate
               : 0;
           const useCfrExport = true;
-          const outputDurationTargetSec = useCfrExport ? outputDurationFixedSec : outputDurationSec;
+          const outputDurationTargetSec = audioDurationSec > 0
+              ? audioDurationSec
+              : (useCfrExport ? outputDurationFixedSec : outputDurationSec);
+          const videoStretch = audioDurationSec > 0 && outputDurationSec > 0
+              ? audioDurationSec / outputDurationSec
+              : 1;
+          const useVideoStretch = Math.abs(videoStretch - 1) > 1e-4;
           const audioFilter = audioInputIndex !== null && outputDurationSec > 0
               ? (() => {
                   const filters: string[] = [];
@@ -1454,13 +1461,14 @@ const App: React.FC = () => {
                   return `;[${audioInputIndex}:a]${filters.join(',')}[outa]`;
               })()
               : '';
+          const videoTimeAdjust = useVideoStretch ? `setpts=PTS*${videoStretch.toFixed(6)},` : '';
           const videoPostFilter = outputDurationTargetSec > 0
               ? useCfrExport
-                  ? `;[outvraw]fps=${DEFAULT_FPS},trim=duration=${formatSec(outputDurationTargetSec)}[outv]`
-                  : `;[outvraw]trim=duration=${formatSec(outputDurationTargetSec)}[outv]`
+                  ? `;[outvraw]${videoTimeAdjust}fps=${DEFAULT_FPS},trim=duration=${formatSec(outputDurationTargetSec)}[outv]`
+                  : `;[outvraw]${videoTimeAdjust}trim=duration=${formatSec(outputDurationTargetSec)}[outv]`
               : useCfrExport
-                  ? `;[outvraw]fps=${DEFAULT_FPS}[outv]`
-                  : `;[outvraw]setpts=PTS-STARTPTS[outv]`;
+                  ? `;[outvraw]${videoTimeAdjust}fps=${DEFAULT_FPS}[outv]`
+                  : `;[outvraw]${videoTimeAdjust}setpts=PTS-STARTPTS[outv]`;
           const filterComplex = `${filterParts.join(';')};${concatInputs.join('')}concat=n=${concatInputs.length}:v=1:a=0[outvraw]` +
               `${videoPostFilter}${audioFilter}`;
           const args: string[] = [];
@@ -1507,6 +1515,9 @@ const App: React.FC = () => {
               audioOffsetSec: Number(audioOffsetSec.toFixed(6)),
               audioDelayMs,
               audioDelaySpec,
+              audioDurationSec: Number(audioDurationSec.toFixed(6)),
+              videoStretch: Number(videoStretch.toFixed(6)),
+              useVideoStretch,
               targetWidth,
               targetHeight,
               useCfrExport,
