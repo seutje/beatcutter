@@ -1573,6 +1573,7 @@ const App: React.FC = () => {
                   if (audioTrimStartSec > 0) {
                       filters.push(`atrim=start=${formatSec(audioTrimStartSec)}`);
                   }
+                  filters.push('aresample=async=1:first_pts=0');
                   if (audioPadSec > 0) {
                       filters.push(`apad=pad_dur=${formatSec(audioPadSec)}`);
                   }
