@@ -1325,15 +1325,8 @@ const App: React.FC = () => {
               }
           }
 
-          let audioInputIndex: number | null = null;
-          if (audioClipForExport) {
-              if (audioClipForExport.filePath.startsWith('blob:') || audioClipForExport.filePath.startsWith('data:')) {
-                  throw new Error('Export requires file paths. Re-import clips in the Electron app.');
-              }
-              if (!inputMap.has(audioClipForExport.id)) {
-                  inputMap.set(audioClipForExport.id, { index: inputIndex++, name: audioClipForExport.filePath });
-              }
-              audioInputIndex = inputMap.get(audioClipForExport.id)?.index ?? null;
+          if (audioClipForExport?.filePath.startsWith('blob:') || audioClipForExport?.filePath.startsWith('data:')) {
+              throw new Error('Export requires file paths. Re-import clips in the Electron app.');
           }
 
           const filterParts: string[] = [];
@@ -1567,21 +1560,7 @@ const App: React.FC = () => {
           const audioPadSec = frameAligned && audioPadSecRaw > 0
               ? Math.ceil(audioPadSecRaw * frameRate) / frameRate
               : audioPadSecRaw;
-          const audioFilter = audioInputIndex !== null && outputDurationSec > 0
-              ? (() => {
-                  const filters: string[] = ['asetpts=PTS-STARTPTS'];
-                  if (audioTrimStartSec > 0) {
-                      filters.push(`atrim=start=${formatSec(audioTrimStartSec)}`);
-                  }
-                  filters.push('aresample=async=1:first_pts=0');
-                  if (audioPadSec > 0) {
-                      filters.push(`apad=pad_dur=${formatSec(audioPadSec)}`);
-                  }
-                  filters.push(`atrim=0:${formatSec(outputDurationTargetSec)}`);
-                  filters.push('asetpts=PTS-STARTPTS');
-                  return `;[${audioInputIndex}:a]${filters.join(',')}[outa]`;
-              })()
-              : '';
+          const audioFilter = '';
           const videoPadFilter = tailPadSec > 0
               ? `tpad=stop_duration=${formatSec(tailPadSec)}:stop_mode=add:color=black,`
               : '';
@@ -1608,8 +1587,38 @@ const App: React.FC = () => {
               '-filter_complex', filterComplex,
               '-map', '[outv]'
           );
-          if (audioInputIndex !== null && outputDurationSec > 0) {
-              args.push('-map', '[outa]');
+          let audioRenderPath = '';
+          if (audioClipForExport && outputDurationSec > 0) {
+              audioRenderPath = joinPath(outputDir, `${outputBaseStem} - ${exportTimestamp} - audio.wav`);
+              const audioFilters: string[] = ['asetpts=PTS-STARTPTS'];
+              if (audioTrimStartSec > 0) {
+                  audioFilters.push(`atrim=start=${formatSec(audioTrimStartSec)}`);
+              }
+              audioFilters.push('aresample=async=1:first_pts=0');
+              if (audioPadSec > 0) {
+                  audioFilters.push(`apad=pad_dur=${formatSec(audioPadSec)}`);
+              }
+              audioFilters.push(`atrim=0:${formatSec(outputDurationTargetSec)}`);
+              audioFilters.push('asetpts=PTS-STARTPTS');
+
+              const audioArgs: string[] = [
+                  '-loglevel', 'info',
+                  '-y',
+                  '-i', audioClipForExport.filePath,
+                  '-af', audioFilters.join(','),
+                  '-t', formatSec(outputDurationTargetSec),
+                  '-c:a', 'pcm_s16le',
+                  '-ar', '48000',
+                  audioRenderPath,
+              ];
+              const audioResult = await runFfmpeg({ jobId: `${jobId}-audio`, args: audioArgs, durationSec: outputDurationTargetSec });
+              if (audioResult.exitCode !== 0 || audioResult.signal) {
+                  console.error('FFmpeg audio render failed', audioResult, { audioArgs });
+                  setExportError('Export failed during audio render. Check console logs for details.');
+                  return;
+              }
+              args.push('-i', audioRenderPath);
+              args.push('-map', `${inputIndex}:a`);
           }
           const safeMbps = Number.isFinite(exportMbps) && exportMbps > 0 ? exportMbps : 8;
           if (is4kExport) {
@@ -1655,6 +1664,7 @@ const App: React.FC = () => {
                   ? 'buffer'
                   : (audioClipForExport ? 'clip' : 'timeline'),
               audioBufferDurationSec: Number(audioBufferDurationSec.toFixed(6)),
+              audioRenderPath,
               audioEffectiveDurationSec: Number(audioEffectiveDurationSec.toFixed(6)),
               audioPadSec: Number(audioPadSec.toFixed(6)),
               tailPadSec: Number(tailPadSec.toFixed(6)),
