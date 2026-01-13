@@ -1528,9 +1528,10 @@ const App: React.FC = () => {
           const outputPath = joinPath(outputDir, outputFileName);
 
           const outputDurationSec = preferCfrExport ? lastEndFrames / frameRate : lastEndSec;
-          const audioOffsetSec = Math.min(0, introSkipFrames) / DEFAULT_FPS;
-          const audioDelayMs = audioOffsetSec < 0 ? Math.round(-audioOffsetSec * 1000) : 0;
-          const audioDelaySpec = audioDelayMs > 0 ? `${audioDelayMs}|${audioDelayMs}` : '';
+          const audioTrimStartFrames = introSkipFrames < 0 ? Math.abs(introSkipFrames) : 0;
+          const audioTrimStartSec = audioTrimStartFrames / DEFAULT_FPS;
+          const audioDelayMs = 0;
+          const audioDelaySpec = '';
           const audioDurationSec = Number.isFinite(duration) && duration > 0 ? duration / 1000 : 0;
           const frameAligned = preferCfrExport;
           const timelineEndFramesExact = maxTimelineEndSec * frameRate;
@@ -1554,8 +1555,8 @@ const App: React.FC = () => {
           const audioFilter = audioInputIndex !== null && outputDurationSec > 0
               ? (() => {
                   const filters: string[] = [];
-                  if (audioDelaySpec) {
-                      filters.push(`adelay=${audioDelaySpec}`);
+                  if (audioTrimStartSec > 0) {
+                      filters.push(`atrim=start=${formatSec(audioTrimStartSec)}`);
                   }
                   filters.push('apad');
                   filters.push(`atrim=0:${formatSec(outputDurationTargetSec)}`);
@@ -1618,7 +1619,8 @@ const App: React.FC = () => {
               outputDurationSec: Number(outputDurationSec.toFixed(6)),
               outputDurationFixedSec: Number(outputDurationFixedSec.toFixed(6)),
               outputDurationTargetSec: Number(outputDurationTargetSec.toFixed(6)),
-              audioOffsetSec: Number(audioOffsetSec.toFixed(6)),
+              audioTrimStartSec: Number(audioTrimStartSec.toFixed(6)),
+              audioTrimStartFrames,
               introSkipFrames,
               audioDelayMs,
               audioDelaySpec,
