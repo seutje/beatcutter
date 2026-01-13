@@ -1573,21 +1573,8 @@ const App: React.FC = () => {
                   : `;[outvraw]${videoPadFilter}setpts=PTS-STARTPTS[outv]`;
           const filterComplex = `${filterParts.join(';')};${concatInputs.join('')}concat=n=${concatInputs.length}:v=1:a=0[outvraw]` +
               `${videoPostFilter}${audioFilter}`;
-          const args: string[] = [];
-          const is4kExport = targetWidth >= 3840 || targetHeight >= 2160;
-          args.push('-loglevel', 'info');
-          args.push('-y');
-          inputMap.forEach((input) => {
-              args.push('-i', input.name);
-          });
-          if (is4kExport) {
-              args.push('-filter_complex_threads', '2');
-          }
-          args.push(
-              '-filter_complex', filterComplex,
-              '-map', '[outv]'
-          );
           let audioRenderPath = '';
+          let audioInputIndexForMux: number | null = null;
           if (audioClipForExport && outputDurationSec > 0) {
               audioRenderPath = joinPath(outputDir, `${outputBaseStem} - ${exportTimestamp} - audio.wav`);
               const audioFilters: string[] = ['asetpts=PTS-STARTPTS'];
@@ -1617,8 +1604,27 @@ const App: React.FC = () => {
                   setExportError('Export failed during audio render. Check console logs for details.');
                   return;
               }
+              audioInputIndexForMux = inputMap.size;
+          }
+          const args: string[] = [];
+          const is4kExport = targetWidth >= 3840 || targetHeight >= 2160;
+          args.push('-loglevel', 'info');
+          args.push('-y');
+          inputMap.forEach((input) => {
+              args.push('-i', input.name);
+          });
+          if (audioRenderPath) {
               args.push('-i', audioRenderPath);
-              args.push('-map', `${inputIndex}:a`);
+          }
+          if (is4kExport) {
+              args.push('-filter_complex_threads', '2');
+          }
+          args.push(
+              '-filter_complex', filterComplex,
+              '-map', '[outv]'
+          );
+          if (audioInputIndexForMux !== null) {
+              args.push('-map', `${audioInputIndexForMux}:a`);
           }
           const safeMbps = Number.isFinite(exportMbps) && exportMbps > 0 ? exportMbps : 8;
           if (is4kExport) {
@@ -1665,6 +1671,7 @@ const App: React.FC = () => {
                   : (audioClipForExport ? 'clip' : 'timeline'),
               audioBufferDurationSec: Number(audioBufferDurationSec.toFixed(6)),
               audioRenderPath,
+              audioInputIndexForMux,
               audioEffectiveDurationSec: Number(audioEffectiveDurationSec.toFixed(6)),
               audioPadSec: Number(audioPadSec.toFixed(6)),
               tailPadSec: Number(tailPadSec.toFixed(6)),
