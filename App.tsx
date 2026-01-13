@@ -470,6 +470,18 @@ const App: React.FC = () => {
       setProjectIoStatus(`Saved project to ${projectPath}`);
   };
 
+  const handleLoadProject = async () => {
+      if (!window.electronAPI?.project?.selectFile) {
+          setProjectIoStatus('Project loading is only available in the Electron app.');
+          return;
+      }
+      const filePath = await window.electronAPI.project.selectFile();
+      if (!filePath) {
+          return;
+      }
+      await loadProjectFromPath(filePath);
+  };
+
   const handleLoadLastProject = () => {
       if (!lastProjectPath) {
           setProjectIoStatus('No saved project found.');
@@ -1593,6 +1605,7 @@ const App: React.FC = () => {
   };
 
   const canSaveProject = Boolean(window.electronAPI?.project?.save) && clips.some(c => c.type === 'audio');
+  const canLoadProject = Boolean(window.electronAPI?.project?.selectFile) && Boolean(window.electronAPI?.project?.load);
   const canLoadLastProject = Boolean(window.electronAPI?.project?.load) && Boolean(lastProjectPath);
 
   // --- Render ---
@@ -1615,9 +1628,11 @@ const App: React.FC = () => {
             onGeminiApiKeyChange={setGeminiApiKey}
             projectName={projectName}
             onSaveProject={handleSaveProject}
+            onLoadProject={handleLoadProject}
             onLoadLastProject={handleLoadLastProject}
             onNewProject={handleNewProject}
             canSaveProject={canSaveProject}
+            canLoadProject={canLoadProject}
             canLoadLastProject={canLoadLastProject}
             projectIoStatus={projectIoStatus}
         />

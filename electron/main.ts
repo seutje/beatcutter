@@ -194,6 +194,18 @@ app.whenReady().then(() => {
       }
     }
   );
+  ipcMain.handle("project:openDialog", async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ["openFile"],
+      filters: [
+        {
+          name: "Beatcutter Project",
+          extensions: ["json"],
+        },
+      ],
+    });
+    return result.canceled ? null : result.filePaths[0] ?? null;
+  });
   registerFfmpegIpc();
   registerProxyIpc();
 

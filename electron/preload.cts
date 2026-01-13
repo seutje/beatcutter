@@ -86,6 +86,8 @@ type ProjectLoadResponse = {
   error?: string;
 };
 
+type ProjectOpenDialogResponse = string | null;
+
 const api = {
   ping: () => ipcRenderer.invoke("app:ping") as Promise<string>,
   getVersions: () => ipcRenderer.invoke("app:getVersions") as Promise<AppVersions>,
@@ -97,6 +99,8 @@ const api = {
       ipcRenderer.invoke("project:save", request) as Promise<ProjectSaveResponse>,
     load: (request: ProjectLoadRequest) =>
       ipcRenderer.invoke("project:load", request) as Promise<ProjectLoadResponse>,
+    selectFile: () =>
+      ipcRenderer.invoke("project:openDialog") as Promise<ProjectOpenDialogResponse>,
   },
   ffmpeg: {
     run: (request: FfmpegRunRequest) =>

@@ -19,9 +19,11 @@ interface HeaderProps {
     onGeminiApiKeyChange: (value: string) => void;
     projectName: string;
     onSaveProject: () => void;
+    onLoadProject: () => void;
     onLoadLastProject: () => void;
     onNewProject: () => void;
     canSaveProject: boolean;
+    canLoadProject: boolean;
     canLoadLastProject: boolean;
     projectIoStatus: string | null;
 }
@@ -43,9 +45,11 @@ const Header: React.FC<HeaderProps> = ({
     onGeminiApiKeyChange,
     projectName,
     onSaveProject,
+    onLoadProject,
     onLoadLastProject,
     onNewProject,
     canSaveProject,
+    canLoadProject,
     canLoadLastProject,
     projectIoStatus
 }) => {
@@ -169,11 +173,11 @@ const Header: React.FC<HeaderProps> = ({
                             </p>
                             <div className="mt-4 border-t border-stone-800 pt-4">
                                 <div className="text-xs uppercase tracking-wide text-stone-500">Project</div>
-                                <div className="mt-3 flex gap-2">
+                                <div className="mt-3 grid grid-cols-2 gap-2">
                                     <button
                                         onClick={onSaveProject}
                                         disabled={!canSaveProject}
-                                        className={`flex-1 rounded border px-3 py-2 text-sm font-medium transition-colors ${
+                                        className={`w-full rounded border px-3 py-2 text-sm font-medium transition-colors ${
                                             canSaveProject
                                                 ? 'bg-stone-800 text-stone-200 border-stone-700 hover:bg-stone-700'
                                                 : 'bg-stone-800 text-stone-500 border-stone-700 cursor-not-allowed'
@@ -182,9 +186,20 @@ const Header: React.FC<HeaderProps> = ({
                                         Save Project
                                     </button>
                                     <button
+                                        onClick={onLoadProject}
+                                        disabled={!canLoadProject}
+                                        className={`w-full rounded border px-3 py-2 text-sm font-medium transition-colors ${
+                                            canLoadProject
+                                                ? 'bg-stone-800 text-stone-200 border-stone-700 hover:bg-stone-700'
+                                                : 'bg-stone-800 text-stone-500 border-stone-700 cursor-not-allowed'
+                                        }`}
+                                    >
+                                        Load Project
+                                    </button>
+                                    <button
                                         onClick={onLoadLastProject}
                                         disabled={!canLoadLastProject}
-                                        className={`flex-1 rounded border px-3 py-2 text-sm font-medium transition-colors ${
+                                        className={`w-full rounded border px-3 py-2 text-sm font-medium transition-colors ${
                                             canLoadLastProject
                                                 ? 'bg-stone-800 text-stone-200 border-stone-700 hover:bg-stone-700'
                                                 : 'bg-stone-800 text-stone-500 border-stone-700 cursor-not-allowed'

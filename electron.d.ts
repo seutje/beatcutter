@@ -50,6 +50,8 @@ type ProjectLoadResponse = {
   error?: string;
 };
 
+type ProjectOpenDialogResponse = string | null;
+
 declare global {
   interface Window {
     electronAPI?: {
@@ -60,6 +62,7 @@ declare global {
       project: {
         save: (request: ProjectSaveRequest) => Promise<ProjectSaveResponse>;
         load: (request: ProjectLoadRequest) => Promise<ProjectLoadResponse>;
+        selectFile: () => Promise<ProjectOpenDialogResponse>;
       };
       ffmpeg: {
         run: (request: FfmpegRunRequest) => Promise<FfmpegRunResult>;
