@@ -1459,17 +1459,14 @@ const App: React.FC = () => {
               if (applyCfrPerSegment) {
                   filterChain.push(`fps=${DEFAULT_FPS}`);
               }
-              const postTrimDuration = (preferCfrExport && typeof segmentFrames === 'number')
-                  ? `trim=end_frame=${segmentFrames},`
-                  : `trim=duration=${formatSec(durationSec)},`;
 
               const fadeSuffix = fadeFilters.length > 0 ? `,${fadeFilters.join(',')}` : '';
               const gapSuffix = (preferCfrExport && typeof gapFramesRounded === 'number' && gapFramesRounded > 0)
                   ? `,tpad=start=${gapFramesRounded}:start_mode=add:color=black`
                   : (gapSec > 0 ? `,tpad=start_duration=${formatSec(gapSec)}:start_mode=add:color=black` : '');
               filterParts.push(
-                  `[${input.index}:v]${filterChain.join(',')},scale=${targetWidth}:${targetHeight}:flags=fast_bilinear,` +
-                  `${postTrimDuration}${fadeSuffix}${gapSuffix}[v${idx}]`
+                  `[${input.index}:v]${filterChain.join(',')},scale=${targetWidth}:${targetHeight}:flags=fast_bilinear` +
+                  `${fadeSuffix}${gapSuffix}[v${idx}]`
               );
               concatInputs.push(`[v${idx}]`);
               if (preferCfrExport) {
@@ -1591,7 +1588,7 @@ const App: React.FC = () => {
               if (audioTrimStartSec > 0) {
                   audioFilters.push(`atrim=start=${formatSec(audioTrimStartSec)}`);
               }
-              audioFilters.push('asetpts=PTS-STARTPTS', 'aresample=async=1:min_comp=0.001:min_hard_comp=0.1:first_pts=0');
+              audioFilters.push('asetpts=PTS-STARTPTS', 'aresample=async=1:min_comp=0.001:first_pts=0');
               if (audioPadSec > 0) {
                   audioFilters.push(`apad=pad_dur=${formatSec(audioPadSec)}`);
               }
