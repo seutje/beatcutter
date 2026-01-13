@@ -1566,6 +1566,7 @@ const App: React.FC = () => {
                   const filters: string[] = [];
                   if (audioTrimStartSec > 0) {
                       filters.push(`atrim=start=${formatSec(audioTrimStartSec)}`);
+                      filters.push('asetpts=PTS-STARTPTS');
                   }
                   if (audioPadSec > 0) {
                       filters.push(`apad=whole_dur=${formatSec(outputDurationTargetSec)}`);
