@@ -1608,13 +1608,19 @@ const App: React.FC = () => {
           if (is4kExport) {
               args.push('-threads', '2');
           }
+          const fpsArgs = useCfrExport
+              ? applyCfrPerSegment
+                  ? ['-vsync', 'cfr', '-video_track_timescale', `${Math.round(DEFAULT_FPS * 1000)}`]
+                  : ['-vsync', 'cfr', '-r', `${DEFAULT_FPS}`, '-video_track_timescale', `${Math.round(DEFAULT_FPS * 1000)}`]
+              : ['-vsync', 'vfr'];
+          if (frameAligned && exportEndFrames > 0) {
+              args.push('-frames:v', `${exportEndFrames}`);
+          }
           args.push(
               '-c:v', 'libx264',
               '-preset', 'ultrafast',
               '-bf', '0',
-              ...(useCfrExport
-                  ? ['-vsync', 'cfr', '-r', `${DEFAULT_FPS}`, '-video_track_timescale', `${Math.round(DEFAULT_FPS * 1000)}`]
-                  : ['-vsync', 'vfr']),
+              ...fpsArgs,
               '-b:v', `${Math.max(1, safeMbps).toFixed(0)}M`,
               '-pix_fmt', 'yuv420p',
               '-profile:v', 'high',
