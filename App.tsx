@@ -1544,7 +1544,7 @@ const App: React.FC = () => {
           const useCfrExport = forceCfrOutput || frameAligned;
           const useOutputFpsFilter = useCfrExport && !applyCfrPerSegment;
           const outputDurationTargetSec = audioDurationSec > 0
-              ? audioDurationSec
+              ? outputDurationSec
               : (useCfrExport ? outputDurationFixedSec : outputDurationSec);
           const tailPadSecRaw = outputDurationTargetSec > 0 && outputDurationTargetSec > outputDurationSec
               ? outputDurationTargetSec - outputDurationSec
@@ -1552,13 +1552,24 @@ const App: React.FC = () => {
           const tailPadSec = frameAligned && tailPadSecRaw > 0
               ? Math.ceil(tailPadSecRaw * frameRate) / frameRate
               : tailPadSecRaw;
+          const audioEffectiveDurationSec = audioDurationSec > 0
+              ? Math.max(0, audioDurationSec - audioTrimStartSec)
+              : 0;
+          const audioPadSecRaw = outputDurationTargetSec > 0 && audioEffectiveDurationSec > 0
+              ? Math.max(0, outputDurationTargetSec - audioEffectiveDurationSec)
+              : 0;
+          const audioPadSec = frameAligned && audioPadSecRaw > 0
+              ? Math.ceil(audioPadSecRaw * frameRate) / frameRate
+              : audioPadSecRaw;
           const audioFilter = audioInputIndex !== null && outputDurationSec > 0
               ? (() => {
                   const filters: string[] = [];
                   if (audioTrimStartSec > 0) {
                       filters.push(`atrim=start=${formatSec(audioTrimStartSec)}`);
                   }
-                  filters.push('apad');
+                  if (audioPadSec > 0) {
+                      filters.push(`apad=pad_dur=${formatSec(audioPadSec)}`);
+                  }
                   filters.push(`atrim=0:${formatSec(outputDurationTargetSec)}`);
                   filters.push('asetpts=PTS-STARTPTS');
                   return `;[${audioInputIndex}:a]${filters.join(',')}[outa]`;
@@ -1625,6 +1636,8 @@ const App: React.FC = () => {
               audioDelayMs,
               audioDelaySpec,
               audioDurationSec: Number(audioDurationSec.toFixed(6)),
+              audioEffectiveDurationSec: Number(audioEffectiveDurationSec.toFixed(6)),
+              audioPadSec: Number(audioPadSec.toFixed(6)),
               tailPadSec: Number(tailPadSec.toFixed(6)),
               timelineEndSec: Number(maxTimelineEndSec.toFixed(6)),
               timelineEndFramesExact: Number(timelineEndFramesExact.toFixed(6)),
