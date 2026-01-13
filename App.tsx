@@ -1302,6 +1302,7 @@ const App: React.FC = () => {
       const [targetWidth, targetHeight] = exportResolution.split('x').map(Number);
       const exportTimestamp = Math.floor(Date.now() / 1000);
       const primaryAudioForExport = getPrimaryAudioClip(clips);
+      const audioClipForExport = audioClip ?? primaryAudioForExport;
       const inputMap = new Map<string, { index: number; name: string }>();
       let inputIndex = 0;
 
@@ -1325,14 +1326,14 @@ const App: React.FC = () => {
           }
 
           let audioInputIndex: number | null = null;
-          if (audioClip) {
-              if (audioClip.filePath.startsWith('blob:') || audioClip.filePath.startsWith('data:')) {
+          if (audioClipForExport) {
+              if (audioClipForExport.filePath.startsWith('blob:') || audioClipForExport.filePath.startsWith('data:')) {
                   throw new Error('Export requires file paths. Re-import clips in the Electron app.');
               }
-              if (!inputMap.has(audioClip.id)) {
-                  inputMap.set(audioClip.id, { index: inputIndex++, name: audioClip.filePath });
+              if (!inputMap.has(audioClipForExport.id)) {
+                  inputMap.set(audioClipForExport.id, { index: inputIndex++, name: audioClipForExport.filePath });
               }
-              audioInputIndex = inputMap.get(audioClip.id)?.index ?? null;
+              audioInputIndex = inputMap.get(audioClipForExport.id)?.index ?? null;
           }
 
           const filterParts: string[] = [];
@@ -1512,7 +1513,7 @@ const App: React.FC = () => {
 
           const firstClipId = sortedSegments.find(segment => inputMap.has(segment.sourceClipId))?.sourceClipId;
           const firstClipPath = firstClipId ? inputMap.get(firstClipId)?.name ?? '' : '';
-          const audioExportPath = primaryAudioForExport?.filePath ?? '';
+          const audioExportPath = audioClipForExport?.filePath ?? '';
           const canUseAudioPath = audioExportPath && !audioExportPath.startsWith('blob:') && !audioExportPath.startsWith('data:');
           const outputBaseStem = canUseAudioPath
               ? stripExtension(getBaseName(audioExportPath)) || 'beatcutter-export'
@@ -1532,7 +1533,9 @@ const App: React.FC = () => {
           const audioTrimStartSec = audioTrimStartFrames / DEFAULT_FPS;
           const audioDelayMs = 0;
           const audioDelaySpec = '';
-          const audioDurationSec = Number.isFinite(duration) && duration > 0 ? duration / 1000 : 0;
+          const audioDurationSec = audioClipForExport && Number.isFinite(audioClipForExport.duration) && audioClipForExport.duration > 0
+              ? audioClipForExport.duration / 1000
+              : (Number.isFinite(duration) && duration > 0 ? duration / 1000 : 0);
           const frameAligned = preferCfrExport;
           const timelineEndFramesExact = maxTimelineEndSec * frameRate;
           const timelineEndFramesRounded = Math.round(timelineEndFramesExact);
@@ -1563,10 +1566,9 @@ const App: React.FC = () => {
               : audioPadSecRaw;
           const audioFilter = audioInputIndex !== null && outputDurationSec > 0
               ? (() => {
-                  const filters: string[] = [];
+                  const filters: string[] = ['asetpts=PTS-STARTPTS'];
                   if (audioTrimStartSec > 0) {
                       filters.push(`atrim=start=${formatSec(audioTrimStartSec)}`);
-                      filters.push('asetpts=PTS-STARTPTS');
                   }
                   if (audioPadSec > 0) {
                       filters.push(`apad=whole_dur=${formatSec(outputDurationTargetSec)}`);
@@ -1642,7 +1644,10 @@ const App: React.FC = () => {
               introSkipFrames,
               audioDelayMs,
               audioDelaySpec,
+              audioClipName: audioClipForExport?.name ?? '',
+              audioClipPath: audioClipForExport?.filePath ?? '',
               audioDurationSec: Number(audioDurationSec.toFixed(6)),
+              audioBufferDurationSec: Number((masterAudioBufferRef.current?.duration ?? 0).toFixed(6)),
               audioEffectiveDurationSec: Number(audioEffectiveDurationSec.toFixed(6)),
               audioPadSec: Number(audioPadSec.toFixed(6)),
               tailPadSec: Number(tailPadSec.toFixed(6)),
