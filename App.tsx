@@ -1444,8 +1444,11 @@ const App: React.FC = () => {
                   const dSec = Math.max(durationMs / 1000, 0.001);
                   fadeFilters.push(`fade=t=out:st=${formatSec(stSec)}:d=${formatSec(dSec)}`);
               }
+              const trimDuration = (preferCfrExport && typeof segmentFrames === 'number')
+                  ? `:end_frame=${segmentFrames}`
+                  : `:duration=${formatSec(durationSec)}`;
               const filterChain = [
-                  `trim=start=${formatSec(startSec)}:duration=${formatSec(durationSec)}`
+                  `trim=start=${formatSec(startSec)}${trimDuration}`
               ];
               if (segment.reverse) {
                   filterChain.push('reverse');
@@ -1455,9 +1458,9 @@ const App: React.FC = () => {
                   filterChain.push(`fps=${DEFAULT_FPS}`);
               }
               const fadeSuffix = fadeFilters.length > 0 ? `,${fadeFilters.join(',')}` : '';
-              const gapSuffix = gapSec > 0
-                  ? `,tpad=start_duration=${formatSec(gapSec)}:start_mode=add:color=black`
-                  : '';
+              const gapSuffix = (preferCfrExport && typeof gapFramesRounded === 'number' && gapFramesRounded > 0)
+                  ? `,tpad=start=${gapFramesRounded}:start_mode=add:color=black`
+                  : (gapSec > 0 ? `,tpad=start_duration=${formatSec(gapSec)}:start_mode=add:color=black` : '');
               filterParts.push(
                   `[${input.index}:v]${filterChain.join(',')},scale=${targetWidth}:${targetHeight}:flags=fast_bilinear` +
                   `${fadeSuffix}${gapSuffix}[v${idx}]`
@@ -1561,9 +1564,10 @@ const App: React.FC = () => {
               ? Math.ceil(audioPadSecRaw * frameRate) / frameRate
               : audioPadSecRaw;
           const audioFilter = '';
-          const videoPadFilter = tailPadSec > 0
-              ? `tpad=stop_duration=${formatSec(tailPadSec)}:stop_mode=add:color=black,`
-              : '';
+          const tailPadFrames = frameAligned ? Math.round(tailPadSec * frameRate) : 0;
+          const videoPadFilter = (frameAligned && tailPadFrames > 0)
+              ? `tpad=stop=${tailPadFrames}:stop_mode=add:color=black,`
+              : (tailPadSec > 0 ? `tpad=stop_duration=${formatSec(tailPadSec)}:stop_mode=add:color=black,` : '');
           const videoPostFilter = outputDurationTargetSec > 0
               ? useOutputFpsFilter
                   ? `;[outvraw]${videoPadFilter}fps=${DEFAULT_FPS},trim=duration=${formatSec(outputDurationTargetSec)}[outv]`
@@ -1577,11 +1581,11 @@ const App: React.FC = () => {
           let audioInputIndexForMux: number | null = null;
           if (audioClipForExport && outputDurationSec > 0) {
               audioRenderPath = joinPath(outputDir, `${outputBaseStem} - ${exportTimestamp} - audio.wav`);
-              const audioFilters: string[] = ['asetpts=PTS-STARTPTS'];
+              const audioFilters: string[] = [];
               if (audioTrimStartSec > 0) {
                   audioFilters.push(`atrim=start=${formatSec(audioTrimStartSec)}`);
               }
-              audioFilters.push('aresample=async=1:first_pts=0');
+              audioFilters.push('asetpts=PTS-STARTPTS', 'aresample=async=1:first_pts=0');
               if (audioPadSec > 0) {
                   audioFilters.push(`apad=pad_dur=${formatSec(audioPadSec)}`);
               }
@@ -1631,9 +1635,7 @@ const App: React.FC = () => {
               args.push('-threads', '2');
           }
           const fpsArgs = useCfrExport
-              ? applyCfrPerSegment
-                  ? ['-vsync', 'cfr', '-video_track_timescale', `${Math.round(DEFAULT_FPS * 1000)}`]
-                  : ['-vsync', 'cfr', '-r', `${DEFAULT_FPS}`, '-video_track_timescale', `${Math.round(DEFAULT_FPS * 1000)}`]
+              ? ['-vsync', 'cfr', '-r', `${DEFAULT_FPS}`, '-video_track_timescale', `${Math.round(DEFAULT_FPS * 1000)}`]
               : ['-vsync', 'vfr'];
           if (frameAligned && exportEndFrames > 0) {
               args.push('-frames:v', `${exportEndFrames}`);
