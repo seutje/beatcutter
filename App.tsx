@@ -1533,9 +1533,12 @@ const App: React.FC = () => {
           const audioTrimStartSec = audioTrimStartFrames / DEFAULT_FPS;
           const audioDelayMs = 0;
           const audioDelaySpec = '';
-          const audioDurationSec = audioClipForExport && Number.isFinite(audioClipForExport.duration) && audioClipForExport.duration > 0
-              ? audioClipForExport.duration / 1000
-              : (Number.isFinite(duration) && duration > 0 ? duration / 1000 : 0);
+          const audioBufferDurationSec = masterAudioBufferRef.current?.duration ?? 0;
+          const audioDurationSec = Number.isFinite(audioBufferDurationSec) && audioBufferDurationSec > 0
+              ? audioBufferDurationSec
+              : (audioClipForExport && Number.isFinite(audioClipForExport.duration) && audioClipForExport.duration > 0
+                  ? audioClipForExport.duration / 1000
+                  : (Number.isFinite(duration) && duration > 0 ? duration / 1000 : 0));
           const frameAligned = preferCfrExport;
           const timelineEndFramesExact = maxTimelineEndSec * frameRate;
           const timelineEndFramesRounded = Math.round(timelineEndFramesExact);
@@ -1571,7 +1574,7 @@ const App: React.FC = () => {
                       filters.push(`atrim=start=${formatSec(audioTrimStartSec)}`);
                   }
                   if (audioPadSec > 0) {
-                      filters.push(`apad=whole_dur=${formatSec(outputDurationTargetSec)}`);
+                      filters.push(`apad=pad_dur=${formatSec(audioPadSec)}`);
                   }
                   filters.push(`atrim=0:${formatSec(outputDurationTargetSec)}`);
                   filters.push('asetpts=PTS-STARTPTS');
@@ -1647,7 +1650,10 @@ const App: React.FC = () => {
               audioClipName: audioClipForExport?.name ?? '',
               audioClipPath: audioClipForExport?.filePath ?? '',
               audioDurationSec: Number(audioDurationSec.toFixed(6)),
-              audioBufferDurationSec: Number((masterAudioBufferRef.current?.duration ?? 0).toFixed(6)),
+              audioDurationSource: Number.isFinite(audioBufferDurationSec) && audioBufferDurationSec > 0
+                  ? 'buffer'
+                  : (audioClipForExport ? 'clip' : 'timeline'),
+              audioBufferDurationSec: Number(audioBufferDurationSec.toFixed(6)),
               audioEffectiveDurationSec: Number(audioEffectiveDurationSec.toFixed(6)),
               audioPadSec: Number(audioPadSec.toFixed(6)),
               tailPadSec: Number(tailPadSec.toFixed(6)),
