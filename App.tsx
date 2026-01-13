@@ -1339,6 +1339,16 @@ const App: React.FC = () => {
           const concatInputs: string[] = [];
           let lastEndSec = 0;
           let lastEndFrames = 0;
+          let lastEndFramesExact = 0;
+          let maxTimelineEndSec = 0;
+          let totalTimelineFramesExact = 0;
+          let totalGapFramesExact = 0;
+          let totalGapFramesRounded = 0;
+          let totalSegmentFramesRounded = 0;
+          let maxStartFrameError = 0;
+          let maxEndFrameError = 0;
+          let maxDurationFrameError = 0;
+          let maxGapFrameError = 0;
           const forceCfrOutput = true;
           const preferCfrExport = forceCfrOutput;
           const applyCfrPerSegment = forceCfrOutput || preferCfrExport;
@@ -1348,9 +1358,19 @@ const App: React.FC = () => {
               if (!input) return;
               const clip = clips.find(c => c.id === segment.sourceClipId);
               if (!clip) return;
-              let segmentStartSec = segment.timelineStart / 1000;
-              let segmentDurationMs = Math.max(0, segment.duration);
-              let segmentDurationSec = segmentDurationMs / 1000;
+              const rawTimelineStartSec = segment.timelineStart / 1000;
+              const rawTimelineDurationMs = Math.max(0, segment.duration);
+              const rawTimelineDurationSec = rawTimelineDurationMs / 1000;
+              const rawTimelineEndSec = rawTimelineStartSec + rawTimelineDurationSec;
+              maxTimelineEndSec = Math.max(maxTimelineEndSec, rawTimelineEndSec);
+              const timelineStartFramesExact = rawTimelineStartSec * frameRate;
+              const timelineEndFramesExact = rawTimelineEndSec * frameRate;
+              const timelineDurationFramesExact = rawTimelineDurationSec * frameRate;
+              totalTimelineFramesExact += timelineDurationFramesExact;
+
+              let segmentStartSec = rawTimelineStartSec;
+              let segmentDurationMs = rawTimelineDurationMs;
+              let segmentDurationSec = rawTimelineDurationSec;
               let gapSec = Math.max(0, segmentStartSec - lastEndSec);
               let segmentStartFrames: number | null = null;
               let segmentEndFrames: number | null = null;
@@ -1378,6 +1398,21 @@ const App: React.FC = () => {
                   segmentDurationMs = segmentDurationSec * 1000;
                   const gapFrames = Math.max(0, (segmentStartFrames ?? 0) - lastEndFrames);
                   gapSec = gapFrames / frameRate;
+
+                  const startFrameError = (segmentStartFrames ?? 0) - timelineStartFramesExact;
+                  const endFrameError = (segmentEndFrames ?? 0) - timelineEndFramesExact;
+                  const durationFrameError = (segmentFrames ?? 0) - timelineDurationFramesExact;
+                  const gapFramesExact = Math.max(0, timelineStartFramesExact - lastEndFramesExact);
+                  const gapFramesRounded = Math.max(0, (segmentStartFrames ?? 0) - lastEndFrames);
+                  const gapFrameError = gapFramesRounded - gapFramesExact;
+                  totalGapFramesExact += gapFramesExact;
+                  totalGapFramesRounded += gapFramesRounded;
+                  totalSegmentFramesRounded += segmentFrames ?? 0;
+                  maxStartFrameError = Math.max(maxStartFrameError, Math.abs(startFrameError));
+                  maxEndFrameError = Math.max(maxEndFrameError, Math.abs(endFrameError));
+                  maxDurationFrameError = Math.max(maxDurationFrameError, Math.abs(durationFrameError));
+                  maxGapFrameError = Math.max(maxGapFrameError, Math.abs(gapFrameError));
+                  lastEndFramesExact = Math.max(lastEndFramesExact, timelineEndFramesExact);
               }
               const durationSec = Math.max(0.001, (segmentDurationMs * speedRate) / 1000);
               const fadeFilters: string[] = [];
@@ -1443,6 +1478,12 @@ const App: React.FC = () => {
                   debugEntry.segmentStartFrames = segmentStartFrames ?? 0;
                   debugEntry.segmentEndFrames = segmentEndFrames ?? 0;
                   debugEntry.segmentFrames = segmentFrames ?? 0;
+                  debugEntry.timelineStartFramesExact = Number(timelineStartFramesExact.toFixed(6));
+                  debugEntry.timelineEndFramesExact = Number(timelineEndFramesExact.toFixed(6));
+                  debugEntry.timelineDurationFramesExact = Number(timelineDurationFramesExact.toFixed(6));
+                  debugEntry.startFrameError = Number(((segmentStartFrames ?? 0) - timelineStartFramesExact).toFixed(6));
+                  debugEntry.endFrameError = Number(((segmentEndFrames ?? 0) - timelineEndFramesExact).toFixed(6));
+                  debugEntry.durationFrameError = Number(((segmentFrames ?? 0) - timelineDurationFramesExact).toFixed(6));
               }
               debugSegments.push(debugEntry);
           });
@@ -1474,6 +1515,10 @@ const App: React.FC = () => {
           const audioDelaySpec = audioDelayMs > 0 ? `${audioDelayMs}|${audioDelayMs}` : '';
           const audioDurationSec = Number.isFinite(duration) && duration > 0 ? duration / 1000 : 0;
           const frameAligned = preferCfrExport;
+          const timelineEndFramesExact = maxTimelineEndSec * frameRate;
+          const timelineEndFramesRounded = Math.round(timelineEndFramesExact);
+          const exportEndFrames = lastEndFrames;
+          const exportFrameDriftFrames = exportEndFrames - timelineEndFramesExact;
           const outputDurationFixedSec = outputDurationSec > 0
               ? Math.round(outputDurationSec * frameRate) / frameRate
               : 0;
@@ -1556,10 +1601,24 @@ const App: React.FC = () => {
               outputDurationFixedSec: Number(outputDurationFixedSec.toFixed(6)),
               outputDurationTargetSec: Number(outputDurationTargetSec.toFixed(6)),
               audioOffsetSec: Number(audioOffsetSec.toFixed(6)),
+              introSkipFrames,
               audioDelayMs,
               audioDelaySpec,
               audioDurationSec: Number(audioDurationSec.toFixed(6)),
               tailPadSec: Number(tailPadSec.toFixed(6)),
+              timelineEndSec: Number(maxTimelineEndSec.toFixed(6)),
+              timelineEndFramesExact: Number(timelineEndFramesExact.toFixed(6)),
+              timelineEndFramesRounded,
+              exportEndFrames,
+              exportFrameDriftFrames: Number(exportFrameDriftFrames.toFixed(6)),
+              totalTimelineFramesExact: Number(totalTimelineFramesExact.toFixed(6)),
+              totalGapFramesExact: Number(totalGapFramesExact.toFixed(6)),
+              totalGapFramesRounded,
+              totalSegmentFramesRounded,
+              maxStartFrameError: Number(maxStartFrameError.toFixed(6)),
+              maxEndFrameError: Number(maxEndFrameError.toFixed(6)),
+              maxDurationFrameError: Number(maxDurationFrameError.toFixed(6)),
+              maxGapFrameError: Number(maxGapFrameError.toFixed(6)),
               applyCfrPerSegment,
               useOutputFpsFilter,
               targetWidth,
