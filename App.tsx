@@ -1390,7 +1390,7 @@ const App: React.FC = () => {
               const speedRate = Number.isFinite(effectiveRate) && effectiveRate > 0 ? effectiveRate : 1;
               const speedFactor = 1 / speedRate;
               const trimStartSec = startSec;
-              const trimDurationSec = (segmentDurationMs * speedRate) / 1000;
+              let trimDurationSec = (segmentDurationMs * speedRate) / 1000;
               if (preferCfrExport) {
                   gapFramesExact = Math.max(0, timelineStartFramesExact - lastEndFramesExact);
                   const gapFrames = Math.max(0, Math.round(gapFramesExact + gapFrameErrorAccumulator));
@@ -1406,6 +1406,9 @@ const App: React.FC = () => {
                   segmentStartSec = (segmentStartFrames ?? 0) / frameRate;
                   segmentDurationSec = (segmentFrames ?? 1) / frameRate;
                   segmentDurationMs = segmentDurationSec * 1000;
+                  // Use a slightly longer source trim to ensure the fps filter has enough material
+                  // to produce exactly segmentFrames, even with rounding jitter.
+                  trimDurationSec = ((segmentDurationMs + 200) * speedRate) / 1000;
                   gapSec = gapFrames / frameRate;
 
                   startFrameError = (segmentStartFrames ?? 0) - timelineStartFramesExact;
@@ -1422,7 +1425,6 @@ const App: React.FC = () => {
                   maxCumulativeFrameDrift = Math.max(maxCumulativeFrameDrift, Math.abs(endFrameError));
                   lastEndFramesExact = Math.max(lastEndFramesExact, timelineEndFramesExact);
               }
-              const durationSec = Math.max(0.001, (segmentDurationMs * speedRate) / 1000);
               const fadeFilters: string[] = [];
               const fadeIn = segment.fadeIn ?? defaultFadeIn;
               if (fadeIn.enabled) {
@@ -1446,9 +1448,6 @@ const App: React.FC = () => {
                   const dSec = Math.max(durationMs / 1000, 0.001);
                   fadeFilters.push(`fade=t=out:st=${formatSec(stSec)}:d=${formatSec(dSec)}`);
               }
-              const trimDuration = (preferCfrExport && typeof segmentFrames === 'number')
-                  ? `:end_frame=${segmentFrames}`
-                  : `:duration=${formatSec(durationSec)}`;
               const filterChain = [
                   `trim=start=${formatSec(trimStartSec)}:duration=${formatSec(trimDurationSec)}`
               ];
@@ -1458,6 +1457,10 @@ const App: React.FC = () => {
               filterChain.push(`setpts=(PTS-STARTPTS)*${speedFactor.toFixed(6)}`);
               if (applyCfrPerSegment) {
                   filterChain.push(`fps=${DEFAULT_FPS}`);
+              }
+              // Force exact frame count for CFR export to prevent drift accumulation.
+              if (preferCfrExport && typeof segmentFrames === 'number') {
+                  filterChain.push(`trim=end_frame=${segmentFrames}`);
               }
 
               const fadeSuffix = fadeFilters.length > 0 ? `,${fadeFilters.join(',')}` : '';
