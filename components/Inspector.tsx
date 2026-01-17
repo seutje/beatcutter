@@ -11,6 +11,9 @@ interface InspectorProps {
     swapMode: boolean;
     swapSourceId: string | null;
     onToggleSwapMode: (id: string) => void;
+    insertBeforeMode: boolean;
+    insertBeforeSourceId: string | null;
+    onToggleInsertBeforeMode: (id: string) => void;
     introSkipFrames: number;
     onUpdateIntroSkipFrames: (frames: number) => void;
     bpm: number;
@@ -32,6 +35,9 @@ const Inspector: React.FC<InspectorProps> = ({
     swapMode,
     swapSourceId,
     onToggleSwapMode,
+    insertBeforeMode,
+    insertBeforeSourceId,
+    onToggleInsertBeforeMode,
     introSkipFrames,
     onUpdateIntroSkipFrames,
     bpm,
@@ -69,18 +75,36 @@ const Inspector: React.FC<InspectorProps> = ({
                                         max={16}
                                         step={0.25}
                                         value={Number.isFinite(mediaClipBars) ? mediaClipBars : 4}
-                                        onChange={(e) => onUpdateMediaClipBars(Number(e.target.value))}
-                                        className="w-full bg-stone-800 border border-stone-700 rounded px-2 py-1 text-sm text-stone-200"
-                                    />
-                                </div>
-                                <button
-                                    type="button"
-                                    onClick={() => onAddClipToTimeline(selectedMediaClip.id)}
-                                    className="w-full rounded border border-amber-400/60 bg-amber-500/20 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-amber-100 hover:bg-amber-500/30"
-                                >
-                                    Add to Timeline
-                                </button>
-                            </>
+                                         onChange={(e) => onUpdateMediaClipBars(Number(e.target.value))}
+                                         className="w-full bg-stone-800 border border-stone-700 rounded px-2 py-1 text-sm text-stone-200"
+                                     />
+                                 </div>
+                                 <div className="space-y-2">
+                                     {insertBeforeMode && insertBeforeSourceId === selectedMediaClip.id && (
+                                         <div className="rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                                             Insert mode active. Click a clip in the timeline to insert this clip before it.
+                                         </div>
+                                     )}
+                                     <button
+                                         type="button"
+                                         onClick={() => onAddClipToTimeline(selectedMediaClip.id)}
+                                         className="w-full rounded border border-amber-400/60 bg-amber-500/20 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-amber-100 hover:bg-amber-500/30"
+                                     >
+                                         Add to Timeline
+                                     </button>
+                                     <button
+                                         type="button"
+                                         onClick={() => onToggleInsertBeforeMode(selectedMediaClip.id)}
+                                         className={`w-full rounded border px-3 py-2 text-xs font-semibold uppercase tracking-wide transition ${
+                                             insertBeforeMode && insertBeforeSourceId === selectedMediaClip.id
+                                                 ? 'border-amber-400 bg-amber-500/20 text-amber-100 shadow-[0_0_10px_rgba(245,158,11,0.35)]'
+                                                 : 'border-stone-700 bg-stone-800 text-stone-200 hover:bg-stone-700'
+                                         }`}
+                                     >
+                                         {insertBeforeMode && insertBeforeSourceId === selectedMediaClip.id ? 'Insert Active' : 'Insert Before'}
+                                     </button>
+                                 </div>
+                             </>
                         ) : (
                             <p className="text-sm text-stone-500">
                                 Select a video clip to add it to the timeline.

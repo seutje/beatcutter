@@ -37,6 +37,8 @@ const App: React.FC = () => {
   const [mediaClipBars, setMediaClipBars] = useState<number>(4);
   const [swapMode, setSwapMode] = useState<boolean>(false);
   const [swapSourceId, setSwapSourceId] = useState<string | null>(null);
+  const [insertBeforeMode, setInsertBeforeMode] = useState<boolean>(false);
+  const [insertBeforeSourceId, setInsertBeforeSourceId] = useState<string | null>(null);
   const [autoSyncOpen, setAutoSyncOpen] = useState<boolean>(false);
   const [autoSyncBpm, setAutoSyncBpm] = useState<number>(120);
   const [autoSyncBars, setAutoSyncBars] = useState<number>(4);
@@ -832,9 +834,76 @@ const App: React.FC = () => {
       }
       setSwapMode(true);
       setSwapSourceId(segmentId);
+      setInsertBeforeMode(false);
+  };
+
+  const handleToggleInsertBeforeMode = (clipId: string) => {
+      if (insertBeforeMode && insertBeforeSourceId === clipId) {
+          setInsertBeforeMode(false);
+          setInsertBeforeSourceId(null);
+          return;
+      }
+      setInsertBeforeMode(true);
+      setInsertBeforeSourceId(clipId);
+      setSwapMode(false);
+  };
+
+  const handleInsertBefore = (sourceClipId: string, targetSegmentId: string) => {
+      const clip = clips.find(c => c.id === sourceClipId);
+      if (!clip || clip.type !== 'video') return;
+
+      const targetTrack = tracks.find(t => t.segments.some(s => s.id === targetSegmentId));
+      if (!targetTrack || targetTrack.type !== 'video') return;
+
+      const barLengthSec = (60 / beatGrid.bpm) * BEATS_PER_BAR;
+      const barDurationMs = Number.isFinite(barLengthSec) ? barLengthSec * 1000 : 0;
+      const requestedBars = Number.isFinite(mediaClipBars) ? mediaClipBars : 4;
+      const clampedBars = Math.min(16, Math.max(0.25, requestedBars));
+      const desiredDuration = barDurationMs > 0 ? clampedBars * barDurationMs : clip.duration;
+      const durationMs = Math.min(clip.duration, Math.max(1, desiredDuration));
+
+      const newSegmentId = uuidv4();
+
+      setTracks(prev => prev.map(t => {
+          const targetIndex = t.segments.findIndex(s => s.id === targetSegmentId);
+          if (targetIndex === -1) return t;
+
+          const targetSegment = t.segments[targetIndex];
+          const insertionTime = targetSegment.timelineStart;
+
+          // Shift segments that are at or after the target position
+          const nextSegments = t.segments.map(s => {
+              if (s.timelineStart >= insertionTime) {
+                  return { ...s, timelineStart: s.timelineStart + durationMs };
+              }
+              return s;
+          });
+
+          const newSegment: ClipSegment = {
+              id: newSegmentId,
+              sourceClipId: clip.id,
+              timelineStart: insertionTime,
+              duration: durationMs,
+              sourceStartOffset: 0,
+              playbackRate: 1,
+              reverse: false,
+              fadeIn: { ...defaultFadeIn },
+              fadeOut: { ...defaultFadeOut }
+          };
+
+          return { ...t, segments: [...nextSegments, newSegment] };
+      }));
+
+      setInsertBeforeMode(false);
+      setInsertBeforeSourceId(null);
+      setSelectedSegmentId(newSegmentId);
   };
 
   const handleSelectSegment = (id: string) => {
+      if (insertBeforeMode && insertBeforeSourceId) {
+          handleInsertBefore(insertBeforeSourceId, id);
+          return;
+      }
       if (swapMode && swapSourceId && id !== swapSourceId) {
           const sourceTrack = tracks.find(t => t.segments.some(s => s.id === swapSourceId));
           const targetTrack = tracks.find(t => t.segments.some(s => s.id === id));
@@ -1816,33 +1885,37 @@ const App: React.FC = () => {
                     zoom={zoom}
                     duration={duration}
                     onSeek={handleSeek}
-                    onZoomChange={handleZoomChange}
-                    onSelectSegment={handleSelectSegment}
-                    selectedSegmentId={selectedSegmentId}
-                />
+            onZoomChange={handleZoomChange}
+            onSelectSegment={handleSelectSegment}
+            selectedSegmentId={selectedSegmentId}
+            insertBeforeMode={insertBeforeMode}
+          />
             </div>
 
             {/* Right: Inspector */}
-            <Inspector 
-                selectedSegmentId={selectedSegmentId}
-                selectedMediaClipId={selectedMediaClipId}
-                tracks={tracks}
-                clips={clips}
-                onUpdateSegment={handleUpdateSegment}
-                onRemoveSegment={handleRemoveSegment}
-                swapMode={swapMode}
-                swapSourceId={swapSourceId}
-                onToggleSwapMode={handleToggleSwapMode}
-                introSkipFrames={introSkipFrames}
-                onUpdateIntroSkipFrames={handleUpdateIntroSkipFrames}
-                bpm={beatGrid.bpm}
-                barLengthSec={(60 / beatGrid.bpm) * BEATS_PER_BAR}
-                onUpdateBpm={handleUpdateBpm}
-                onUpdateBarLength={handleUpdateBarLength}
-                mediaClipBars={mediaClipBars}
-                onUpdateMediaClipBars={setMediaClipBars}
-                onAddClipToTimeline={handleAddClipToTimeline}
-            />
+          <Inspector
+            selectedSegmentId={selectedSegmentId}
+            selectedMediaClipId={selectedMediaClipId}
+            tracks={tracks}
+            clips={clips}
+            onUpdateSegment={handleUpdateSegment}
+            onRemoveSegment={handleRemoveSegment}
+            swapMode={swapMode}
+            swapSourceId={swapSourceId}
+            onToggleSwapMode={handleToggleSwapMode}
+            insertBeforeMode={insertBeforeMode}
+            insertBeforeSourceId={insertBeforeSourceId}
+            onToggleInsertBeforeMode={handleToggleInsertBeforeMode}
+            introSkipFrames={introSkipFrames}
+            onUpdateIntroSkipFrames={handleUpdateIntroSkipFrames}
+            bpm={beatGrid.bpm}
+            barLengthSec={(60 / beatGrid.bpm) * BEATS_PER_BAR}
+            onUpdateBpm={handleUpdateBpm}
+            onUpdateBarLength={handleUpdateBarLength}
+            mediaClipBars={mediaClipBars}
+            onUpdateMediaClipBars={setMediaClipBars}
+            onAddClipToTimeline={handleAddClipToTimeline}
+          />
         </div>
 
         {autoSyncOpen && (

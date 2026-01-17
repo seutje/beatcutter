@@ -14,6 +14,7 @@ interface TimelineProps {
     onZoomChange: (zoom: number) => void;
     onSelectSegment: (id: string) => void;
     selectedSegmentId: string | null;
+    insertBeforeMode?: boolean;
 }
 
 const Timeline: React.FC<TimelineProps> = ({
@@ -27,7 +28,8 @@ const Timeline: React.FC<TimelineProps> = ({
     onSeek,
     onZoomChange,
     onSelectSegment,
-    selectedSegmentId
+    selectedSegmentId,
+    insertBeforeMode
 }) => {
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const isScrubbingRef = useRef(false);
@@ -251,7 +253,7 @@ const Timeline: React.FC<TimelineProps> = ({
                                 onMouseDown={(e) => { e.stopPropagation(); }}
                                 className={`absolute top-2 bottom-2 rounded cursor-pointer overflow-hidden border transition-colors ${
                                     isAudioTrack ? `${baseClass} ${audioClass}` : baseClass
-                                }`}
+                                } ${insertBeforeMode ? 'ring-2 ring-blue-500 cursor-copy' : ''}`}
                                 style={{
                                     left: `${(seg.timelineStart / 1000) * zoom}px`,
                                     width: `${(seg.duration / 1000) * zoom}px`
