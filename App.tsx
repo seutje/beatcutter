@@ -1537,7 +1537,7 @@ const App: React.FC = () => {
                   ? `,tpad=start=${gapFramesRounded}:start_mode=add:color=black`
                   : (gapSec > 0 ? `,tpad=start_duration=${formatSec(gapSec)}:start_mode=add:color=black` : '');
               filterParts.push(
-                  `[${input.index}:v]${filterChain.join(',')},scale=${targetWidth}:${targetHeight}:flags=fast_bilinear` +
+                  `[${input.index}:v]${filterChain.join(',')},scale=${targetWidth}:${targetHeight}:flags=fast_bilinear,setsar=1,format=yuv420p` +
                   `${fadeSuffix}${gapSuffix}[v${idx}]`
               );
               concatInputs.push(`[v${idx}]`);
