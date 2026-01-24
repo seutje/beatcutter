@@ -1056,7 +1056,7 @@ const App: React.FC = () => {
               'If unsure, provide best estimates. Return JSON only.'
           ].join(' ');
 
-          const model = import.meta.env.VITE_GEMINI_MODEL || 'gemini-3-flash-preview';
+          const model = (import.meta as any).env.VITE_GEMINI_MODEL || 'gemini-3-flash-preview';
           let payload: any;
           if (window.electronAPI?.geminiAnalyze) {
               const result = await window.electronAPI.geminiAnalyze({
@@ -1316,14 +1316,14 @@ const App: React.FC = () => {
           return;
       }
       const deltaSec = deltaFrames / DEFAULT_FPS;
-      setBeatGrid(prev => {
-          const shiftedBeats = prev.beats.map(beat => Math.max(0, beat + deltaSec));
-          return {
-              ...prev,
-              offset: prev.offset + deltaSec,
-              beats: [...new Set(shiftedBeats)].sort((a, b) => a - b)
-          };
-      });
+       setBeatGrid((prev: BeatGrid) => {
+           const shiftedBeats = prev.beats.map(beat => Math.max(0, beat + (deltaSec as number)));
+           return {
+               ...prev,
+               offset: prev.offset + (deltaSec as number),
+               beats: [...new Set(shiftedBeats)].sort((a: number, b: number) => a - b)
+           };
+       });
       setIntroSkipFrames(clampedFrames);
   };
 
@@ -1812,6 +1812,84 @@ const App: React.FC = () => {
           if (didSucceed) {
               setExportOpen(false);
           }
+       }
+  };
+
+  const handleExportAudio = async () => {
+      if (!window.electronAPI?.ffmpeg?.run) {
+          setExportError('Export is only available in the Electron app.');
+          return;
+      }
+      const audioClip = getPrimaryAudioClip(clips);
+      if (!audioClip) {
+          setExportError('No audio clip found to export.');
+          return;
+      }
+
+      setExporting(true);
+      setExportProgress(0);
+      setExportError(null);
+      setExportOpen(true);
+
+      const jobId = uuidv4();
+      let unsubscribeProgress: (() => void) | null = null;
+
+      try {
+          const introSkipSec = introSkipFrames / DEFAULT_FPS;
+          const outputDir = getDirName(audioClip.filePath);
+          const outputBaseStem = stripExtension(getBaseName(audioClip.filePath));
+          const exportTimestamp = Math.floor(Date.now() / 1000);
+          const outputFileName = `${outputBaseStem} - exported - ${exportTimestamp}.wav`;
+          const outputPath = joinPath(outputDir, outputFileName);
+
+          const args: string[] = ['-loglevel', 'info', '-y'];
+          const filterComplexParts: string[] = [];
+
+          if (introSkipFrames > 0) {
+              // Trim audio
+              args.push('-i', audioClip.filePath);
+              filterComplexParts.push(`atrim=start=${introSkipSec.toFixed(6)},asetpts=PTS-STARTPTS`);
+          } else if (introSkipFrames < 0) {
+              // Pad audio
+              args.push('-i', audioClip.filePath);
+              const padSec = Math.abs(introSkipSec);
+              filterComplexParts.push(`adelay=${(padSec * 1000).toFixed(0)}|${(padSec * 1000).toFixed(0)}`);
+          } else {
+              args.push('-i', audioClip.filePath);
+              filterComplexParts.push('acopy');
+          }
+
+          if (filterComplexParts.length > 0 && filterComplexParts[0] !== 'acopy') {
+              args.push('-af', filterComplexParts.join(','));
+          }
+
+          args.push(outputPath);
+
+          unsubscribeProgress = onFfmpegProgress((progress) => {
+              if (progress.jobId !== jobId) return;
+              if (Number.isFinite(progress.progress)) {
+                  setExportProgress(Math.min(100, Math.round(progress.progress)));
+              }
+          });
+
+          const result = await runFfmpeg({
+              jobId,
+              args,
+              durationSec: audioClip.duration / 1000 + (introSkipFrames < 0 ? Math.abs(introSkipSec) : 0)
+          });
+
+          if (result.exitCode !== 0 || result.signal) {
+              throw new Error(`FFmpeg failed with exit code ${result.exitCode}`);
+          }
+
+          setExportProgress(100);
+          setTimeout(() => setExportOpen(false), 1000);
+      } catch (error) {
+          console.error('Audio export failed', error);
+          setExportError(error instanceof Error ? error.message : 'Audio export failed.');
+      } finally {
+          if (unsubscribeProgress) unsubscribeProgress();
+          setExporting(false);
       }
   };
 
@@ -1915,6 +1993,7 @@ const App: React.FC = () => {
             mediaClipBars={mediaClipBars}
             onUpdateMediaClipBars={setMediaClipBars}
             onAddClipToTimeline={handleAddClipToTimeline}
+            onExportAudio={handleExportAudio}
           />
         </div>
 

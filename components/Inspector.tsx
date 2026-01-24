@@ -23,6 +23,7 @@ interface InspectorProps {
     mediaClipBars: number;
     onUpdateMediaClipBars: (bars: number) => void;
     onAddClipToTimeline: (clipId: string) => void;
+    onExportAudio?: () => void;
 }
 
 const Inspector: React.FC<InspectorProps> = ({
@@ -46,7 +47,8 @@ const Inspector: React.FC<InspectorProps> = ({
     onUpdateBarLength,
     mediaClipBars,
     onUpdateMediaClipBars,
-    onAddClipToTimeline
+    onAddClipToTimeline,
+    onExportAudio
 }) => {
     const segment = tracks.flatMap(track => track.segments).find(s => s.id === selectedSegmentId);
     const sourceClip = segment ? clips.find(c => c.id === segment.sourceClipId) : null;
@@ -375,6 +377,21 @@ const Inspector: React.FC<InspectorProps> = ({
                         </div>
                         <p className="text-xs text-stone-500 mt-2 leading-relaxed">
                             Adjust the beat grid so the first beat lands on the right frame.
+                        </p>
+                    </div>
+                )}
+
+                {sourceClip.type === 'audio' && (
+                    <div className="pt-4 border-t border-stone-800">
+                        <button
+                            type="button"
+                            onClick={onExportAudio}
+                            className="w-full rounded bg-amber-600 hover:bg-amber-500 text-stone-950 font-bold py-2 px-4 shadow-lg transition-colors flex items-center justify-center gap-2"
+                        >
+                            <span>Export Audio</span>
+                        </button>
+                        <p className="text-[10px] text-stone-500 mt-2 text-center">
+                            Exports audio respecting intro skip trim/pad.
                         </p>
                     </div>
                 )}
