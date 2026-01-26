@@ -1182,7 +1182,6 @@ const App: React.FC = () => {
         try { scrubPreviewSourceRef.current.stop(); } catch(e){}
         scrubPreviewSourceRef.current = null;
     }
-    const introSkipSec = Math.min(0, introSkipFrames) / DEFAULT_FPS;
     const startAudioAt = (timelineMs: number) => {
         if (!masterAudioBufferRef.current) return;
         if (audioSourceNodeRef.current) {
@@ -1192,7 +1191,7 @@ const App: React.FC = () => {
         source.buffer = masterAudioBufferRef.current;
         source.connect(ctx.destination);
         const maxOffset = Math.max(0, source.buffer.duration - 0.05);
-        const offsetSec = Math.min(Math.max(0, timelineMs / 1000 - introSkipSec), maxOffset);
+        const offsetSec = Math.min(Math.max(0, timelineMs / 1000), maxOffset);
         source.start(0, offsetSec);
         audioSourceNodeRef.current = source;
     };
@@ -1254,8 +1253,7 @@ const App: React.FC = () => {
 
       const frameSec = 1 / DEFAULT_FPS;
       const maxOffset = Math.max(0, source.buffer.duration - frameSec);
-      const introSkipSec = Math.min(0, introSkipFrames) / DEFAULT_FPS;
-      const offsetSec = Math.min(Math.max(0, timeMs / 1000 - introSkipSec), maxOffset);
+      const offsetSec = Math.min(Math.max(0, timeMs / 1000), maxOffset);
       source.start(0, offsetSec, frameSec);
 
       scrubPreviewSourceRef.current = source;
@@ -1600,8 +1598,7 @@ const App: React.FC = () => {
           const outputPath = joinPath(outputDir, outputFileName);
 
           const outputDurationSec = preferCfrExport ? lastEndFrames / frameRate : lastEndSec;
-          const audioTrimStartFrames = introSkipFrames < 0 ? Math.abs(introSkipFrames) : 0;
-          const audioTrimStartSec = audioTrimStartFrames / DEFAULT_FPS;
+          const audioTrimStartSec = 0;
           const audioDelayMs = 0;
           const audioDelaySpec = '';
           const audioBufferDurationSec = masterAudioBufferRef.current?.duration ?? 0;
@@ -1656,11 +1653,8 @@ const App: React.FC = () => {
           let audioInputIndexForMux: number | null = null;
           if (audioClipForExport && outputDurationSec > 0) {
               audioRenderPath = joinPath(outputDir, `${outputBaseStem} - ${exportTimestamp} - audio.wav`);
-              const audioFilters: string[] = [];
-              if (audioTrimStartSec > 0) {
-                  audioFilters.push(`atrim=start=${formatSec(audioTrimStartSec)}`);
-              }
-              audioFilters.push('asetpts=PTS-STARTPTS', 'aresample=async=1:min_comp=0.001:first_pts=0');
+               const audioFilters: string[] = [];
+               audioFilters.push('asetpts=PTS-STARTPTS', 'aresample=async=1:min_comp=0.001:first_pts=0');
               if (audioPadSec > 0) {
                   audioFilters.push(`apad=pad_dur=${formatSec(audioPadSec)}`);
               }
@@ -1735,9 +1729,8 @@ const App: React.FC = () => {
               outputDurationSec: Number(outputDurationSec.toFixed(6)),
               outputDurationFixedSec: Number(outputDurationFixedSec.toFixed(6)),
               outputDurationTargetSec: Number(outputDurationTargetSec.toFixed(6)),
-              audioTrimStartSec: Number(audioTrimStartSec.toFixed(6)),
-              audioTrimStartFrames,
-              introSkipFrames,
+               audioTrimStartSec: Number(audioTrimStartSec.toFixed(6)),
+               introSkipFrames,
               audioDelayMs,
               audioDelaySpec,
               audioClipName: audioClipForExport?.name ?? '',
