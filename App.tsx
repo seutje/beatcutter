@@ -858,7 +858,7 @@ const App: React.FC = () => {
       const barLengthSec = (60 / beatGrid.bpm) * BEATS_PER_BAR;
       const barDurationMs = Number.isFinite(barLengthSec) ? barLengthSec * 1000 : 0;
       const requestedBars = Number.isFinite(mediaClipBars) ? mediaClipBars : 4;
-      const clampedBars = Math.min(16, Math.max(0.25, requestedBars));
+      const clampedBars = Math.min(32, Math.max(0.25, requestedBars));
       const desiredDuration = barDurationMs > 0 ? clampedBars * barDurationMs : clip.duration;
       const durationMs = Math.min(clip.duration, Math.max(1, desiredDuration));
 
@@ -936,7 +936,7 @@ const App: React.FC = () => {
       const barLengthSec = (60 / beatGrid.bpm) * BEATS_PER_BAR;
       const barDurationMs = Number.isFinite(barLengthSec) ? barLengthSec * 1000 : 0;
       const requestedBars = Number.isFinite(mediaClipBars) ? mediaClipBars : 4;
-      const clampedBars = Math.min(16, Math.max(0.25, requestedBars));
+      const clampedBars = Math.min(32, Math.max(0.25, requestedBars));
       const desiredDuration = barDurationMs > 0 ? clampedBars * barDurationMs : clip.duration;
       const durationMs = Math.min(clip.duration, Math.max(1, desiredDuration));
       const introSkipMs = Math.max(0, introSkipFrames) / DEFAULT_FPS * 1000;
@@ -1119,7 +1119,7 @@ const App: React.FC = () => {
       }
 
       const clampedBpm = Math.min(300, Math.max(30, Number(autoSyncBpm)));
-      const clampedBars = Math.min(8, Math.max(1, Math.round(Number(autoSyncBars))));
+      const clampedBars = Math.min(32, Math.max(1, Math.round(Number(autoSyncBars))));
       const nextIntroSkipFrames = Math.round(Number(autoSyncIntroSkipFrames));
 
       const baseOffset = 0;
@@ -2030,7 +2030,7 @@ const App: React.FC = () => {
                     <input
                       type="number"
                       min={1}
-                      max={8}
+                      max={32}
                       step={1}
                       value={autoSyncBars}
                       onChange={(e) => setAutoSyncBars(Number(e.target.value))}

@@ -74,7 +74,7 @@ const Inspector: React.FC<InspectorProps> = ({
                                     <input
                                         type="number"
                                         min={0.25}
-                                        max={16}
+                                        max={32}
                                         step={0.25}
                                         value={Number.isFinite(mediaClipBars) ? mediaClipBars : 4}
                                          onChange={(e) => onUpdateMediaClipBars(Number(e.target.value))}
@@ -145,7 +145,8 @@ const Inspector: React.FC<InspectorProps> = ({
     const updateDurationMs = (nextDurationMs: number) => {
         if (!Number.isFinite(nextDurationMs)) return;
         const minDuration = 1;
-        const maxDuration = Math.max(minDuration, sourceClip.duration);
+        const maxBarsDuration = barDurationMs > 0 ? 32 * barDurationMs : 120000;
+        const maxDuration = Math.max(minDuration, sourceClip.duration, maxBarsDuration);
         const clampedDuration = Math.min(maxDuration, Math.max(minDuration, nextDurationMs));
         const maxOffset = Math.max(0, sourceClip.duration - clampedDuration);
         const clampedOffset = Math.min(segment.sourceStartOffset, maxOffset);
@@ -223,14 +224,14 @@ const Inspector: React.FC<InspectorProps> = ({
                             <input
                                 type="number"
                                 min={0.25}
-                                max={8}
+                                max={32}
                                 step={0.25}
                                 value={Number.isFinite(durationBars) ? Number(durationBars.toFixed(2)) : 1}
                                 disabled={sourceClip.type === 'audio'}
                                 onChange={(e) => {
                                     const nextBars = Number(e.target.value);
                                     if (!Number.isFinite(nextBars) || barDurationMs <= 0) return;
-                                    const clampedBars = Math.min(8, Math.max(0.5, nextBars));
+                                    const clampedBars = Math.min(32, Math.max(0.25, nextBars));
                                     updateDurationMs(clampedBars * barDurationMs);
                                 }}
                                 className="w-full bg-stone-800 border border-stone-700 rounded px-2 py-1 text-sm text-stone-200 disabled:cursor-not-allowed disabled:opacity-50"
