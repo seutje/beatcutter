@@ -12,9 +12,13 @@ const MEL_BINS = 128;
 const MEL_FMIN_HZ = 30;
 const MEL_FMAX_HZ = 11000;
 const LOG_MAG_SCALE = 1000;
-const MAX_CHUNK_SECONDS = 30;
-const MIN_PEAK_PROBABILITY = 0.2;
-const MIN_BEAT_GAP_SECONDS = 0.08;
+const INFERENCE_CHUNK_SIZE_FRAMES = 1500;
+const INFERENCE_BORDER_SIZE_FRAMES = 6;
+const BPM_MIN = 60;
+const BPM_MAX = 200;
+const BPM_BIN_WIDTH = 0.1;
+const MAX_IOI_BEATS = 8;
+const PEAK_MAXPOOL_WIDTH = 7;
 const MIN_INTERVAL_SECONDS = 60 / 240;
 const MAX_INTERVAL_SECONDS = 60 / 40;
 const MODEL_RELATIVE_PATH = 'models/beatthis-small0.onnx';
@@ -29,8 +33,24 @@ const getModelUrl = (): string => {
   return `${normalizedBase}${MODEL_RELATIVE_PATH}`;
 };
 
-const toMel = (hz: number): number => 2595 * Math.log10(1 + hz / 700);
-const toHz = (mel: number): number => 700 * (10 ** (mel / 2595) - 1);
+// Match torchaudio/librosa Slaney mel scale used by BeatThis preprocessing.
+const toMelSlaney = (hz: number): number => {
+  const fSp = 200 / 3;
+  const minLogHz = 1000;
+  const minLogMel = minLogHz / fSp;
+  const logStep = Math.log(6.4) / 27;
+  if (hz < minLogHz) return hz / fSp;
+  return minLogMel + Math.log(hz / minLogHz) / logStep;
+};
+
+const toHzSlaney = (mel: number): number => {
+  const fSp = 200 / 3;
+  const minLogHz = 1000;
+  const minLogMel = minLogHz / fSp;
+  const logStep = Math.log(6.4) / 27;
+  if (mel < minLogMel) return mel * fSp;
+  return minLogHz * Math.exp(logStep * (mel - minLogMel));
+};
 
 const getHannWindow = (): Float32Array => {
   if (hannWindowCache) return hannWindowCache;
@@ -48,14 +68,16 @@ const getMelFilterbank = (): Float32Array => {
   const bins = FFT_SIZE / 2 + 1;
   const filterbank = new Float32Array(MEL_BINS * bins);
   const clampedMaxHz = Math.min(MEL_FMAX_HZ, (TARGET_SAMPLE_RATE / 2) - 1);
-  const melMin = toMel(MEL_FMIN_HZ);
-  const melMax = toMel(clampedMaxHz);
+  const melMin = toMelSlaney(MEL_FMIN_HZ);
+  const melMax = toMelSlaney(clampedMaxHz);
   const melPoints = new Float32Array(MEL_BINS + 2);
+  const hzPoints = new Float32Array(MEL_BINS + 2);
   const fftBins = new Int32Array(MEL_BINS + 2);
 
   for (let i = 0; i < melPoints.length; i++) {
     melPoints[i] = melMin + ((melMax - melMin) * i) / (MEL_BINS + 1);
-    const hz = toHz(melPoints[i]);
+    const hz = toHzSlaney(melPoints[i]);
+    hzPoints[i] = hz;
     const mapped = Math.floor(((FFT_SIZE + 1) * hz) / TARGET_SAMPLE_RATE);
     fftBins[i] = Math.max(0, Math.min(bins - 1, mapped));
   }
@@ -74,13 +96,12 @@ const getMelFilterbank = (): Float32Array => {
       filterbank[offset + k] = (right - k) / (right - center);
     }
 
-    let sum = 0;
-    for (let k = 0; k < bins; k++) {
-      sum += filterbank[offset + k];
-    }
-    if (sum > 0) {
+    // Slaney area normalization (torchaudio/librosa behavior).
+    const hzSpan = hzPoints[band + 1] - hzPoints[band - 1];
+    if (hzSpan > 0) {
+      const enorm = 2 / hzSpan;
       for (let k = 0; k < bins; k++) {
-        filterbank[offset + k] /= sum;
+        filterbank[offset + k] *= enorm;
       }
     }
   }
@@ -181,9 +202,23 @@ const computeLogMelSpectrogram = (
     return { data: new Float32Array(0), frameCount: 0 };
   }
 
-  const frameCount = audio.length <= FFT_SIZE
-    ? 1
-    : 1 + Math.floor((audio.length - FFT_SIZE) / HOP_SIZE);
+  const reflectIndex = (index: number, length: number): number => {
+    if (length <= 1) return 0;
+    let idx = index;
+    while (idx < 0 || idx >= length) {
+      if (idx < 0) {
+        idx = -idx;
+      } else {
+        idx = (2 * length) - 2 - idx;
+      }
+    }
+    return idx;
+  };
+
+  // BeatThis uses centered STFT (torchaudio default center=True).
+  const pad = FFT_SIZE / 2;
+  const frameCount = 1 + Math.floor(audio.length / HOP_SIZE);
+  const frameNorm = Math.sqrt(FFT_SIZE);
 
   const bins = FFT_SIZE / 2 + 1;
   const melFilters = getMelFilterbank();
@@ -196,16 +231,17 @@ const computeLogMelSpectrogram = (
   for (let frame = 0; frame < frameCount; frame++) {
     real.fill(0);
     imag.fill(0);
-    const frameOffset = frame * HOP_SIZE;
+    const frameStart = (frame * HOP_SIZE) - pad;
     for (let i = 0; i < FFT_SIZE; i++) {
-      const index = frameOffset + i;
-      real[i] = (index < audio.length ? audio[index] : 0) * window[i];
+      const index = reflectIndex(frameStart + i, audio.length);
+      real[i] = audio[index] * window[i];
     }
 
     fftInPlace(real, imag);
 
     for (let k = 0; k < bins; k++) {
-      power[k] = real[k] * real[k] + imag[k] * imag[k];
+      const magnitude = Math.sqrt((real[k] * real[k]) + (imag[k] * imag[k])) / frameNorm;
+      power[k] = magnitude;
     }
 
     const outOffset = frame * MEL_BINS;
@@ -302,7 +338,15 @@ const extractVector = (tensor: ort.Tensor, expectedLength: number): Float32Array
   return padded;
 };
 
-const extractBeatProbabilities = (tensor: ort.Tensor, expectedFrames: number): Float32Array => {
+type FrameLogits = {
+  beat: Float32Array;
+  downbeat: Float32Array;
+};
+
+const extractBeatDownbeatFromTensor = (
+  tensor: ort.Tensor,
+  expectedFrames: number
+): FrameLogits => {
   const data = tensor.data as Float32Array;
   const dims = tensor.dims;
 
@@ -310,19 +354,31 @@ const extractBeatProbabilities = (tensor: ort.Tensor, expectedFrames: number): F
     const [d0, d1, d2] = dims;
     if (d2 === 2) {
       const frames = Math.min(d1, expectedFrames);
-      const out = new Float32Array(frames);
-      for (let t = 0; t < frames; t++) out[t] = data[t * 2];
-      return out;
+      const beat = new Float32Array(frames);
+      const downbeat = new Float32Array(frames);
+      for (let t = 0; t < frames; t++) {
+        beat[t] = data[(t * 2)];
+        downbeat[t] = data[(t * 2) + 1];
+      }
+      return { beat, downbeat };
     }
     if (d1 === 2) {
       const frames = Math.min(d2, expectedFrames);
-      const out = new Float32Array(frames);
-      for (let t = 0; t < frames; t++) out[t] = data[t];
-      return out;
+      const beat = new Float32Array(frames);
+      const downbeat = new Float32Array(frames);
+      const frameStride = d2;
+      for (let t = 0; t < frames; t++) {
+        beat[t] = data[t];
+        downbeat[t] = data[frameStride + t];
+      }
+      return { beat, downbeat };
     }
     if (d0 === 2) {
       const frames = Math.min(d1 * d2, expectedFrames);
-      return data.slice(0, frames);
+      const beat = data.slice(0, frames);
+      const downbeat = new Float32Array(frames);
+      downbeat.set(data.slice(frames, frames * 2));
+      return { beat, downbeat };
     }
   }
 
@@ -330,29 +386,28 @@ const extractBeatProbabilities = (tensor: ort.Tensor, expectedFrames: number): F
     const [d0, d1] = dims;
     if (d1 === 2) {
       const frames = Math.min(d0, expectedFrames);
-      const out = new Float32Array(frames);
-      for (let t = 0; t < frames; t++) out[t] = data[t * 2];
-      return out;
+      const beat = new Float32Array(frames);
+      const downbeat = new Float32Array(frames);
+      for (let t = 0; t < frames; t++) {
+        beat[t] = data[(t * 2)];
+        downbeat[t] = data[(t * 2) + 1];
+      }
+      return { beat, downbeat };
     }
     if (d0 === 2) {
       const frames = Math.min(d1, expectedFrames);
-      return data.slice(0, frames);
+      return {
+        beat: data.slice(0, frames),
+        downbeat: data.slice(frames, frames * 2)
+      };
     }
   }
 
-  if (data.length === expectedFrames * 2) {
-    const out = new Float32Array(expectedFrames);
-    for (let t = 0; t < expectedFrames; t++) out[t] = data[t * 2];
-    return out;
-  }
-
-  if (data.length >= expectedFrames) {
-    return data.slice(0, expectedFrames);
-  }
-
-  const padded = new Float32Array(expectedFrames);
-  padded.set(data);
-  return padded;
+  const beat = extractVector(tensor, expectedFrames);
+  return {
+    beat,
+    downbeat: new Float32Array(beat.length)
+  };
 };
 
 const loadBeatThisSession = async (): Promise<ort.InferenceSession> => {
@@ -388,10 +443,10 @@ const loadBeatThisSession = async (): Promise<ort.InferenceSession> => {
   return beatThisSessionPromise;
 };
 
-const inferBeatProbabilities = async (
+const inferFrameLogits = async (
   logMel: Float32Array,
   frameCount: number
-): Promise<Float32Array> => {
+): Promise<FrameLogits> => {
   const session = await loadBeatThisSession();
   const inputName = session.inputNames[0];
   const inputTensor = createInputTensor(session, logMel, frameCount);
@@ -402,133 +457,238 @@ const inferBeatProbabilities = async (
     const key = name.toLowerCase();
     return key.includes('beat') && !key.includes('down');
   });
+  const downbeatOutputName = outputNames.find((name) => name.toLowerCase().includes('down'));
 
   if (beatOutputName && outputs[beatOutputName]) {
-    return extractVector(outputs[beatOutputName], frameCount);
+    const beat = extractVector(outputs[beatOutputName], frameCount);
+    const downbeat = downbeatOutputName && outputs[downbeatOutputName]
+      ? extractVector(outputs[downbeatOutputName], frameCount)
+      : new Float32Array(beat.length);
+    return { beat, downbeat };
   }
 
   if (outputNames.length >= 2) {
     const first = outputs[outputNames[0]];
-    if (first) return extractVector(first, frameCount);
+    const second = outputs[outputNames[1]];
+    if (first && second) {
+      return {
+        beat: extractVector(first, frameCount),
+        downbeat: extractVector(second, frameCount)
+      };
+    }
   }
 
   const firstOutput = outputs[outputNames[0]];
   if (!firstOutput) {
     throw new Error('BeatThis model did not return outputs.');
   }
-  return extractBeatProbabilities(firstOutput, frameCount);
+  return extractBeatDownbeatFromTensor(firstOutput, frameCount);
 };
 
-const smoothProbabilities = (values: Float32Array, radius = 2): Float32Array => {
-  if (values.length === 0) return new Float32Array(0);
-  const out = new Float32Array(values.length);
-  for (let i = 0; i < values.length; i++) {
-    const start = Math.max(0, i - radius);
-    const end = Math.min(values.length - 1, i + radius);
-    let sum = 0;
-    for (let j = start; j <= end; j++) sum += values[j];
-    out[i] = sum / (end - start + 1);
-  }
-  return out;
-};
-
-const pickPeakFrames = (
-  series: Float32Array,
-  threshold: number,
-  minDistanceFrames: number
+const splitPieceStarts = (
+  frameCount: number,
+  chunkSize: number,
+  borderSize: number
 ): number[] => {
-  if (series.length < 3) return [];
-  const peaks: number[] = [];
-  const strengths: number[] = [];
-
-  for (let i = 1; i < series.length - 1; i++) {
-    const value = series[i];
-    if (value < threshold) continue;
-    if (value < series[i - 1] || value <= series[i + 1]) continue;
-
-    const lastIndex = peaks.length > 0 ? peaks[peaks.length - 1] : -Infinity;
-    if (i - lastIndex >= minDistanceFrames) {
-      peaks.push(i);
-      strengths.push(value);
-      continue;
-    }
-
-    const previousStrength = strengths[strengths.length - 1];
-    if (value > previousStrength) {
-      peaks[peaks.length - 1] = i;
-      strengths[strengths.length - 1] = value;
-    }
+  const starts: number[] = [];
+  const step = chunkSize - (2 * borderSize);
+  for (let start = -borderSize; start < frameCount - borderSize; start += step) {
+    starts.push(start);
   }
-
-  return peaks;
+  if (frameCount > step && starts.length > 0) {
+    starts[starts.length - 1] = frameCount - (chunkSize - borderSize);
+  }
+  return starts;
 };
 
-const detectBeatTimes = (beatProbabilities: Float32Array, chunkStartSeconds: number): number[] => {
-  if (beatProbabilities.length === 0) return [];
+const extractSpectrogramChunk = (
+  spectrogram: Float32Array,
+  fullFrames: number,
+  startFrame: number,
+  chunkSize: number,
+  borderSize: number
+): { chunk: Float32Array; chunkFrames: number } => {
+  const from = Math.max(startFrame, 0);
+  const to = Math.min(startFrame + chunkSize, fullFrames);
+  const leftPad = Math.max(0, -startFrame);
+  const rightPad = Math.max(0, Math.min(borderSize, (startFrame + chunkSize) - fullFrames));
+  const sourceFrames = Math.max(0, to - from);
+  const chunkFrames = leftPad + sourceFrames + rightPad;
 
-  const smoothed = smoothProbabilities(beatProbabilities, 2);
-  let mean = 0;
-  for (let i = 0; i < smoothed.length; i++) mean += smoothed[i];
-  mean /= smoothed.length;
-
-  let variance = 0;
-  for (let i = 0; i < smoothed.length; i++) {
-    const delta = smoothed[i] - mean;
-    variance += delta * delta;
+  const chunk = new Float32Array(chunkFrames * MEL_BINS);
+  for (let frame = 0; frame < sourceFrames; frame++) {
+    const srcOffset = (from + frame) * MEL_BINS;
+    const dstOffset = (leftPad + frame) * MEL_BINS;
+    chunk.set(spectrogram.subarray(srcOffset, srcOffset + MEL_BINS), dstOffset);
   }
-  variance /= smoothed.length;
-  const stdDev = Math.sqrt(variance);
-  const dynamicThreshold = Math.max(MIN_PEAK_PROBABILITY, mean + stdDev * 0.35);
-  const minDistance = Math.max(1, Math.round((60 / 240) * FRAMES_PER_SECOND));
-
-  let frames = pickPeakFrames(smoothed, dynamicThreshold, minDistance);
-  if (frames.length < 2) {
-    const relaxed = Math.max(MIN_PEAK_PROBABILITY * 0.6, dynamicThreshold * 0.75);
-    frames = pickPeakFrames(smoothed, relaxed, Math.max(1, Math.floor(minDistance / 2)));
-  }
-
-  return frames.map((frame) => chunkStartSeconds + frame / FRAMES_PER_SECOND);
+  return { chunk, chunkFrames };
 };
 
-const dedupeTimes = (times: number[], minGapSeconds: number): number[] => {
-  if (times.length === 0) return [];
-  const sorted = [...times].sort((a, b) => a - b);
-  const unique: number[] = [sorted[0]];
-  for (let i = 1; i < sorted.length; i++) {
-    if (sorted[i] - unique[unique.length - 1] >= minGapSeconds) {
-      unique.push(sorted[i]);
+const trimBorders = (
+  logits: Float32Array,
+  borderSize: number
+): Float32Array => {
+  if (borderSize <= 0 || logits.length <= (2 * borderSize)) {
+    return logits.slice();
+  }
+  return logits.slice(borderSize, logits.length - borderSize);
+};
+
+const inferFullTrackFrameLogits = async (
+  spectrogram: Float32Array,
+  frameCount: number
+): Promise<FrameLogits> => {
+  const starts = splitPieceStarts(frameCount, INFERENCE_CHUNK_SIZE_FRAMES, INFERENCE_BORDER_SIZE_FRAMES);
+  const predBeatChunks: Float32Array[] = [];
+  const predDownbeatChunks: Float32Array[] = [];
+
+  for (const start of starts) {
+    const { chunk, chunkFrames } = extractSpectrogramChunk(
+      spectrogram,
+      frameCount,
+      start,
+      INFERENCE_CHUNK_SIZE_FRAMES,
+      INFERENCE_BORDER_SIZE_FRAMES
+    );
+    const pred = await inferFrameLogits(chunk, chunkFrames);
+    predBeatChunks.push(trimBorders(pred.beat, INFERENCE_BORDER_SIZE_FRAMES));
+    predDownbeatChunks.push(trimBorders(pred.downbeat, INFERENCE_BORDER_SIZE_FRAMES));
+    await yieldToMainThread();
+  }
+
+  const beat = new Float32Array(frameCount);
+  const downbeat = new Float32Array(frameCount);
+  beat.fill(-1000);
+  downbeat.fill(-1000);
+
+  // keep_first overlap mode: process in reverse so earlier chunks overwrite later chunks.
+  for (let i = starts.length - 1; i >= 0; i--) {
+    const start = starts[i] + INFERENCE_BORDER_SIZE_FRAMES;
+    const beatChunk = predBeatChunks[i];
+    const downbeatChunk = predDownbeatChunks[i];
+
+    for (let f = 0; f < beatChunk.length; f++) {
+      const target = start + f;
+      if (target < 0 || target >= frameCount) continue;
+      beat[target] = beatChunk[f];
+      if (f < downbeatChunk.length) {
+        downbeat[target] = downbeatChunk[f];
+      }
     }
   }
-  return unique;
+
+  return { beat, downbeat };
 };
 
-const median = (values: number[]): number => {
-  if (values.length === 0) return NaN;
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 0
-    ? (sorted[mid - 1] + sorted[mid]) / 2
-    : sorted[mid];
+const deduplicatePeaks = (peaks: number[], width = 1): number[] => {
+  if (peaks.length === 0) return [];
+  const deduped: number[] = [];
+  let currentMean = peaks[0];
+  let count = 1;
+  for (let i = 1; i < peaks.length; i++) {
+    const next = peaks[i];
+    if ((next - currentMean) <= width) {
+      count += 1;
+      currentMean += (next - currentMean) / count;
+    } else {
+      deduped.push(currentMean);
+      currentMean = next;
+      count = 1;
+    }
+  }
+  deduped.push(currentMean);
+  return deduped;
+};
+
+const minimalPostprocessedBeatTimes = (beatLogits: Float32Array): number[] => {
+  if (beatLogits.length === 0) return [];
+  const radius = Math.floor(PEAK_MAXPOOL_WIDTH / 2);
+  const rawPeaks: number[] = [];
+
+  for (let i = 0; i < beatLogits.length; i++) {
+    const value = beatLogits[i];
+    if (value <= 0) continue;
+    let localMax = -Infinity;
+    const start = Math.max(0, i - radius);
+    const end = Math.min(beatLogits.length - 1, i + radius);
+    for (let j = start; j <= end; j++) {
+      if (beatLogits[j] > localMax) localMax = beatLogits[j];
+    }
+    if (value === localMax) {
+      rawPeaks.push(i);
+    }
+  }
+
+  const deduped = deduplicatePeaks(rawPeaks, 1);
+  return deduped.map((frame) => frame / FRAMES_PER_SECOND);
 };
 
 const estimateBpm = (beatTimes: number[]): number => {
   if (beatTimes.length < 2) return DEFAULT_BPM;
-  const intervals: number[] = [];
-  for (let i = 1; i < beatTimes.length; i++) {
-    const interval = beatTimes[i] - beatTimes[i - 1];
-    if (interval >= MIN_INTERVAL_SECONDS && interval <= MAX_INTERVAL_SECONDS) {
-      intervals.push(interval);
+  const candidates: Array<{ bpm: number; weight: number }> = [];
+
+  for (let i = 0; i < beatTimes.length - 1; i++) {
+    const maxJ = Math.min(beatTimes.length, i + MAX_IOI_BEATS + 1);
+    for (let j = i + 1; j < maxJ; j++) {
+      const dt = beatTimes[j] - beatTimes[i];
+      if (dt <= 0) continue;
+      const beatDistance = j - i;
+      let bpm = (60 * beatDistance) / dt;
+      while (bpm < BPM_MIN) bpm *= 2;
+      while (bpm > BPM_MAX) bpm /= 2;
+      if (bpm >= BPM_MIN && bpm <= BPM_MAX) {
+        candidates.push({ bpm, weight: 1 / beatDistance });
+      }
     }
   }
 
-  if (intervals.length === 0) return DEFAULT_BPM;
+  if (candidates.length === 0) {
+    const intervals: number[] = [];
+    for (let i = 1; i < beatTimes.length; i++) {
+      const interval = beatTimes[i] - beatTimes[i - 1];
+      if (interval >= MIN_INTERVAL_SECONDS && interval <= MAX_INTERVAL_SECONDS) {
+        intervals.push(interval);
+      }
+    }
+    if (intervals.length === 0) return DEFAULT_BPM;
+    intervals.sort((a, b) => a - b);
+    const med = intervals[Math.floor(intervals.length / 2)];
+    let bpm = 60 / med;
+    while (bpm < BPM_MIN) bpm *= 2;
+    while (bpm > BPM_MAX) bpm /= 2;
+    return Number(bpm.toFixed(2));
+  }
 
-  const med = median(intervals);
-  if (!Number.isFinite(med) || med <= 0) return DEFAULT_BPM;
-  let bpm = 60 / med;
-  while (bpm < 60) bpm *= 2;
-  while (bpm > 200) bpm /= 2;
-  return Number(bpm.toFixed(2));
+  const binCount = Math.floor((BPM_MAX - BPM_MIN) / BPM_BIN_WIDTH) + 1;
+  const bins = new Float32Array(binCount);
+  for (const { bpm, weight } of candidates) {
+    const index = Math.max(0, Math.min(binCount - 1, Math.round((bpm - BPM_MIN) / BPM_BIN_WIDTH)));
+    bins[index] += weight;
+  }
+
+  let bestIndex = 0;
+  let bestScore = -Infinity;
+  for (let i = 0; i < binCount; i++) {
+    let score = bins[i];
+    if (i > 0) score += bins[i - 1] * 0.6;
+    if (i < (binCount - 1)) score += bins[i + 1] * 0.6;
+    if (score > bestScore) {
+      bestScore = score;
+      bestIndex = i;
+    }
+  }
+
+  const peakBpm = BPM_MIN + (bestIndex * BPM_BIN_WIDTH);
+  let weightedSum = 0;
+  let weightTotal = 0;
+  for (const { bpm, weight } of candidates) {
+    if (Math.abs(bpm - peakBpm) <= 1.5) {
+      weightedSum += bpm * weight;
+      weightTotal += weight;
+    }
+  }
+  const finalBpm = weightTotal > 0 ? (weightedSum / weightTotal) : peakBpm;
+  return Number(finalBpm.toFixed(2));
 };
 
 const estimateConstantOffset = (beatTimes: number[], secondsPerBeat: number): number => {
@@ -584,33 +744,22 @@ export const analyzeBeats = async (buffer: AudioBuffer): Promise<BeatGrid> => {
       return buildBeatGrid(DEFAULT_BPM, 0, buffer.duration);
     }
 
-    const beats: number[] = [];
-    const chunkSize = Math.floor(MAX_CHUNK_SECONDS * TARGET_SAMPLE_RATE);
-    for (let chunkStart = 0; chunkStart < resampled.length; chunkStart += chunkSize) {
-      const chunkEnd = Math.min(resampled.length, chunkStart + chunkSize);
-      const chunk = resampled.subarray(chunkStart, chunkEnd);
-      const { data, frameCount } = computeLogMelSpectrogram(chunk);
-      if (frameCount === 0) continue;
-
-      const probs = await inferBeatProbabilities(data, frameCount);
-      const chunkStartSec = chunkStart / TARGET_SAMPLE_RATE;
-      beats.push(...detectBeatTimes(probs, chunkStartSec));
-      await yieldToMainThread();
-    }
-
-    const deduped = dedupeTimes(
-      beats
-        .filter((time) => Number.isFinite(time) && time >= 0 && time <= (buffer.duration + 0.1)),
-      MIN_BEAT_GAP_SECONDS
-    );
-
-    if (deduped.length === 0) {
+    const { data: spectrogram, frameCount } = computeLogMelSpectrogram(resampled);
+    if (frameCount === 0) {
       return buildBeatGrid(DEFAULT_BPM, 0, buffer.duration);
     }
 
-    const bpm = estimateBpm(deduped);
+    const frameLogits = await inferFullTrackFrameLogits(spectrogram, frameCount);
+    const beatTimes = minimalPostprocessedBeatTimes(frameLogits.beat)
+      .filter((time) => Number.isFinite(time) && time >= 0 && time <= (buffer.duration + 0.1));
+
+    if (beatTimes.length === 0) {
+      return buildBeatGrid(DEFAULT_BPM, 0, buffer.duration);
+    }
+
+    const bpm = estimateBpm(beatTimes);
     const secondsPerBeat = 60 / bpm;
-    const offset = estimateConstantOffset(deduped, secondsPerBeat);
+    const offset = estimateConstantOffset(beatTimes, secondsPerBeat);
     return buildBeatGrid(bpm, offset, buffer.duration);
   } catch (error) {
     console.warn('BeatThis analysis failed. Falling back to default beat grid.', error);
