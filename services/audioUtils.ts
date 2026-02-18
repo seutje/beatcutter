@@ -531,6 +531,30 @@ const estimateBpm = (beatTimes: number[]): number => {
   return Number(bpm.toFixed(2));
 };
 
+const estimateConstantOffset = (beatTimes: number[], secondsPerBeat: number): number => {
+  if (beatTimes.length === 0 || !Number.isFinite(secondsPerBeat) || secondsPerBeat <= 0) {
+    return 0;
+  }
+
+  let sumSin = 0;
+  let sumCos = 0;
+  for (const time of beatTimes) {
+    const phase = ((time % secondsPerBeat) + secondsPerBeat) % secondsPerBeat;
+    const angle = (phase / secondsPerBeat) * Math.PI * 2;
+    sumSin += Math.sin(angle);
+    sumCos += Math.cos(angle);
+  }
+
+  // If the circular mean is undefined, fall back to first detected beat phase.
+  if (Math.abs(sumSin) < 1e-8 && Math.abs(sumCos) < 1e-8) {
+    return ((beatTimes[0] % secondsPerBeat) + secondsPerBeat) % secondsPerBeat;
+  }
+
+  let meanAngle = Math.atan2(sumSin, sumCos);
+  if (meanAngle < 0) meanAngle += Math.PI * 2;
+  return (meanAngle / (Math.PI * 2)) * secondsPerBeat;
+};
+
 const yieldToMainThread = () =>
   new Promise<void>((resolve) => {
     setTimeout(resolve, 0);
@@ -584,11 +608,10 @@ export const analyzeBeats = async (buffer: AudioBuffer): Promise<BeatGrid> => {
       return buildBeatGrid(DEFAULT_BPM, 0, buffer.duration);
     }
 
-    return {
-      bpm: estimateBpm(deduped),
-      offset: deduped[0],
-      beats: deduped
-    };
+    const bpm = estimateBpm(deduped);
+    const secondsPerBeat = 60 / bpm;
+    const offset = estimateConstantOffset(deduped, secondsPerBeat);
+    return buildBeatGrid(bpm, offset, buffer.duration);
   } catch (error) {
     console.warn('BeatThis analysis failed. Falling back to default beat grid.', error);
     return buildBeatGrid(DEFAULT_BPM, 0, buffer.duration);
