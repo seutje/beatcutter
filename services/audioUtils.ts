@@ -343,6 +343,34 @@ type FrameLogits = {
   downbeat: Float32Array;
 };
 
+const scoreBeatChannel = (logits: Float32Array): number => {
+  if (logits.length === 0) return -Infinity;
+  const radius = Math.floor(PEAK_MAXPOOL_WIDTH / 2);
+  let positiveCount = 0;
+  let peakCount = 0;
+  for (let i = 0; i < logits.length; i++) {
+    const value = logits[i];
+    if (value <= 0) continue;
+    positiveCount += 1;
+    let localMax = -Infinity;
+    const start = Math.max(0, i - radius);
+    const end = Math.min(logits.length - 1, i + radius);
+    for (let j = start; j <= end; j++) {
+      if (logits[j] > localMax) localMax = logits[j];
+    }
+    if (value === localMax) peakCount += 1;
+  }
+  return peakCount + (positiveCount * 0.25);
+};
+
+const selectBeatAndDownbeat = (a: Float32Array, b: Float32Array): FrameLogits => {
+  const scoreA = scoreBeatChannel(a);
+  const scoreB = scoreBeatChannel(b);
+  return scoreA >= scoreB
+    ? { beat: a, downbeat: b }
+    : { beat: b, downbeat: a };
+};
+
 const extractBeatDownbeatFromTensor = (
   tensor: ort.Tensor,
   expectedFrames: number
@@ -354,31 +382,31 @@ const extractBeatDownbeatFromTensor = (
     const [d0, d1, d2] = dims;
     if (d2 === 2) {
       const frames = Math.min(d1, expectedFrames);
-      const beat = new Float32Array(frames);
-      const downbeat = new Float32Array(frames);
+      const channel0 = new Float32Array(frames);
+      const channel1 = new Float32Array(frames);
       for (let t = 0; t < frames; t++) {
-        beat[t] = data[(t * 2)];
-        downbeat[t] = data[(t * 2) + 1];
+        channel0[t] = data[(t * 2)];
+        channel1[t] = data[(t * 2) + 1];
       }
-      return { beat, downbeat };
+      return selectBeatAndDownbeat(channel0, channel1);
     }
     if (d1 === 2) {
       const frames = Math.min(d2, expectedFrames);
-      const beat = new Float32Array(frames);
-      const downbeat = new Float32Array(frames);
+      const channel0 = new Float32Array(frames);
+      const channel1 = new Float32Array(frames);
       const frameStride = d2;
       for (let t = 0; t < frames; t++) {
-        beat[t] = data[t];
-        downbeat[t] = data[frameStride + t];
+        channel0[t] = data[t];
+        channel1[t] = data[frameStride + t];
       }
-      return { beat, downbeat };
+      return selectBeatAndDownbeat(channel0, channel1);
     }
     if (d0 === 2) {
       const frames = Math.min(d1 * d2, expectedFrames);
-      const beat = data.slice(0, frames);
-      const downbeat = new Float32Array(frames);
-      downbeat.set(data.slice(frames, frames * 2));
-      return { beat, downbeat };
+      const channel0 = data.slice(0, frames);
+      const channel1 = new Float32Array(frames);
+      channel1.set(data.slice(frames, frames * 2));
+      return selectBeatAndDownbeat(channel0, channel1);
     }
   }
 
@@ -386,20 +414,20 @@ const extractBeatDownbeatFromTensor = (
     const [d0, d1] = dims;
     if (d1 === 2) {
       const frames = Math.min(d0, expectedFrames);
-      const beat = new Float32Array(frames);
-      const downbeat = new Float32Array(frames);
+      const channel0 = new Float32Array(frames);
+      const channel1 = new Float32Array(frames);
       for (let t = 0; t < frames; t++) {
-        beat[t] = data[(t * 2)];
-        downbeat[t] = data[(t * 2) + 1];
+        channel0[t] = data[(t * 2)];
+        channel1[t] = data[(t * 2) + 1];
       }
-      return { beat, downbeat };
+      return selectBeatAndDownbeat(channel0, channel1);
     }
     if (d0 === 2) {
       const frames = Math.min(d1, expectedFrames);
-      return {
-        beat: data.slice(0, frames),
-        downbeat: data.slice(frames, frames * 2)
-      };
+      return selectBeatAndDownbeat(
+        data.slice(0, frames),
+        data.slice(frames, frames * 2)
+      );
     }
   }
 
@@ -471,10 +499,10 @@ const inferFrameLogits = async (
     const first = outputs[outputNames[0]];
     const second = outputs[outputNames[1]];
     if (first && second) {
-      return {
-        beat: extractVector(first, frameCount),
-        downbeat: extractVector(second, frameCount)
-      };
+      return selectBeatAndDownbeat(
+        extractVector(first, frameCount),
+        extractVector(second, frameCount)
+      );
     }
   }
 
@@ -615,7 +643,20 @@ const minimalPostprocessedBeatTimes = (beatLogits: Float32Array): number[] => {
       if (beatLogits[j] > localMax) localMax = beatLogits[j];
     }
     if (value === localMax) {
-      rawPeaks.push(i);
+      let refinedIndex = i;
+      if (i > 0 && i < (beatLogits.length - 1)) {
+        const y0 = beatLogits[i - 1];
+        const y1 = beatLogits[i];
+        const y2 = beatLogits[i + 1];
+        const denominator = y0 - (2 * y1) + y2;
+        if (Math.abs(denominator) > 1e-8) {
+          const delta = (0.5 * (y0 - y2)) / denominator;
+          if (Number.isFinite(delta) && Math.abs(delta) <= 1) {
+            refinedIndex = i + delta;
+          }
+        }
+      }
+      rawPeaks.push(refinedIndex);
     }
   }
 
