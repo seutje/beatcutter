@@ -22,3 +22,22 @@ body {
   color: #e5e7eb; /* gray-200 */
   overflow: hidden;
 }
+
+@keyframes timeline-stripes-shift {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 24px 0;
+  }
+}
+
+.timeline-processing-stripes {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    rgba(59, 130, 246, 0.24) 0 10px,
+    rgba(15, 23, 42, 0.12) 10px 20px
+  );
+  animation: timeline-stripes-shift 900ms linear infinite;
+  will-change: background-position;
+}

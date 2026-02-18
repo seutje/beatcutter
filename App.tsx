@@ -57,6 +57,7 @@ const App: React.FC = () => {
   const [projectName, setProjectName] = useState<string>('My Beat Video');
   const [projectIoStatus, setProjectIoStatus] = useState<string | null>(null);
   const [lastProjectPath, setLastProjectPath] = useState<string | null>(null);
+  const [audioBeatDetectionRunning, setAudioBeatDetectionRunning] = useState<boolean>(false);
 
   // --- Refs for Audio Engine ---
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -264,10 +265,18 @@ const App: React.FC = () => {
       return mimeMap[ext] || 'application/octet-stream';
   };
 
+  const waitForUiPaint = () =>
+      new Promise<void>((resolve) => {
+          requestAnimationFrame(() => {
+              setTimeout(resolve, 0);
+          });
+      });
+
   const handleImport = async (fileList?: FileList) => {
     const newClips: SourceClip[] = [];
     const importClip = async (filePath: string, nameOverride?: string) => {
         const clipId = uuidv4();
+        const audioSegmentId = uuidv4();
         const isAudio = isAudioPath(filePath, nameOverride);
         const baseNameForDisplay = filePath.startsWith('blob:') && nameOverride
             ? nameOverride
@@ -279,37 +288,11 @@ const App: React.FC = () => {
         const objectUrl = toPlaybackUrl(filePath);
         const urlCandidates = Array.from(new Set([objectUrl, fileUrl]));
         let duration = 0;
+        const shouldLoadAsPrimaryAudio = isAudio && !masterAudioBufferRef.current;
 
         try {
             if (isAudio) {
                duration = await getMediaDuration(urlCandidates, 'audio');
-
-               if (!masterAudioBufferRef.current && duration > 0) {
-                 const buffer = await decodeAudioWithFallback(urlCandidates);
-                 masterAudioBufferRef.current = buffer;
-                 const analysis = await analyzeBeats(buffer);
-                 setBeatGrid(analysis);
-                 setPhaseOffsetSec(normalizePhaseOffset(analysis.offset, analysis.bpm));
-                 const waveformPoints = Math.min(4000, Math.max(600, Math.floor(buffer.duration * 60)));
-                 setWaveform(generateWaveform(buffer, waveformPoints));
-                 setDuration(buffer.duration * 1000);
-
-                 setTracks(prev => prev.map(t =>
-                    t.type === 'audio' ? {
-                        ...t,
-                        segments: [{
-                            id: uuidv4(),
-                            sourceClipId: clipId,
-                            timelineStart: 0,
-                            duration: buffer.duration * 1000,
-                            sourceStartOffset: 0,
-                            playbackRate: 1,
-                            fadeIn: { ...defaultFadeIn },
-                            fadeOut: { ...defaultFadeOut }
-                        }]
-                    } : t
-                 ));
-               }
             } else {
                duration = await getMediaDuration(urlCandidates, 'video');
             }
@@ -317,7 +300,7 @@ const App: React.FC = () => {
             console.error("Error loading metadata for", filePath, e);
         }
 
-        newClips.push({
+        const importedClip: SourceClip = {
             id: clipId,
             filePath,
             duration: duration || 1000,
@@ -325,7 +308,67 @@ const App: React.FC = () => {
             name: nameOverride ?? baseNameForDisplay,
             type: isAudio ? 'audio' : 'video',
             objectUrl
-        });
+        };
+        newClips.push(importedClip);
+        setClips(prev => [...prev, importedClip]);
+
+        if (shouldLoadAsPrimaryAudio) {
+            const initialDurationMs = duration > 0 ? duration : 1000;
+            setTracks(prev => prev.map(t =>
+                t.type === 'audio' ? {
+                    ...t,
+                    segments: [{
+                        id: audioSegmentId,
+                        sourceClipId: clipId,
+                        timelineStart: 0,
+                        duration: initialDurationMs,
+                        sourceStartOffset: 0,
+                        playbackRate: 1,
+                        fadeIn: { ...defaultFadeIn },
+                        fadeOut: { ...defaultFadeOut }
+                    }]
+                } : t
+            ));
+            setDuration(initialDurationMs);
+            setAudioBeatDetectionRunning(true);
+            await waitForUiPaint();
+
+            try {
+                const buffer = await decodeAudioWithFallback(urlCandidates);
+                masterAudioBufferRef.current = buffer;
+                const detectedDurationMs = buffer.duration * 1000;
+
+                setClips(prev => prev.map((clip) => (
+                    clip.id === clipId
+                        ? { ...clip, duration: detectedDurationMs }
+                        : clip
+                )));
+                setTracks(prev => prev.map((track) => (
+                    track.type === 'audio'
+                        ? {
+                            ...track,
+                            segments: track.segments.map((segment) => (
+                                segment.id === audioSegmentId
+                                    ? { ...segment, duration: detectedDurationMs }
+                                    : segment
+                            ))
+                        }
+                        : track
+                )));
+
+                const waveformPoints = Math.min(4000, Math.max(600, Math.floor(buffer.duration * 60)));
+                setWaveform(generateWaveform(buffer, waveformPoints));
+                setDuration(detectedDurationMs);
+
+                const analysis = await analyzeBeats(buffer);
+                setBeatGrid(analysis);
+                setPhaseOffsetSec(normalizePhaseOffset(analysis.offset, analysis.bpm));
+            } catch (error) {
+                console.error('Error decoding/analyzing audio for', filePath, error);
+            } finally {
+                setAudioBeatDetectionRunning(false);
+            }
+        }
     };
 
     if (fileList) {
@@ -345,7 +388,6 @@ const App: React.FC = () => {
         return;
     }
 
-    setClips(prev => [...prev, ...newClips]);
     if (useProxies) {
         newClips.forEach((clip) => {
             void startProxyGeneration(clip);
@@ -545,6 +587,7 @@ const App: React.FC = () => {
       setAutoSyncError(null);
       setAutoSyncAnalyzing(false);
       setAutoSyncPhaseOffsetSec(0);
+      setAudioBeatDetectionRunning(false);
       setPlaybackState(prev => ({ ...prev, isPlaying: false, currentTime: 0 }));
       setProjectName('My Beat Video');
       setProjectIoStatus('Started a new project.');
@@ -611,6 +654,7 @@ const App: React.FC = () => {
       })));
       if (targetClip?.type === 'audio' && !hasRemainingAudio) {
           masterAudioBufferRef.current = null;
+          setAudioBeatDetectionRunning(false);
           setWaveform([]);
           setBeatGrid({ bpm: 120, offset: 0, beats: [] });
           setPhaseOffsetSec(0);
@@ -1919,6 +1963,7 @@ const App: React.FC = () => {
             onSelectSegment={handleSelectSegment}
             selectedSegmentId={selectedSegmentId}
             insertBeforeMode={insertBeforeMode}
+            audioBeatDetectionRunning={audioBeatDetectionRunning}
           />
             </div>
 

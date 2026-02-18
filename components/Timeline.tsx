@@ -15,6 +15,7 @@ interface TimelineProps {
     onSelectSegment: (id: string) => void;
     selectedSegmentId: string | null;
     insertBeforeMode?: boolean;
+    audioBeatDetectionRunning?: boolean;
 }
 
 const Timeline: React.FC<TimelineProps> = ({
@@ -29,7 +30,8 @@ const Timeline: React.FC<TimelineProps> = ({
     onZoomChange,
     onSelectSegment,
     selectedSegmentId,
-    insertBeforeMode
+    insertBeforeMode,
+    audioBeatDetectionRunning
 }) => {
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const isScrubbingRef = useRef(false);
@@ -283,6 +285,15 @@ const Timeline: React.FC<TimelineProps> = ({
                                 </div>
                             </div>
                         )})}
+
+                        {track.type === 'audio' && audioBeatDetectionRunning && (
+                            <div className="absolute inset-0 z-30 pointer-events-none">
+                                <div className="timeline-processing-stripes absolute inset-0" />
+                                <div className="absolute inset-y-0 right-3 flex items-center text-[10px] font-semibold uppercase tracking-[0.16em] text-blue-100/90">
+                                    Detecting BPM
+                                </div>
+                            </div>
+                        )}
                     </div>
                 ))}
 
