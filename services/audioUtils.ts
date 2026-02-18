@@ -1,4 +1,6 @@
 import * as ort from 'onnxruntime-web';
+import ortWasmJsepMjsUrl from 'onnxruntime-web/ort-wasm-simd-threaded.jsep.mjs?url';
+import ortWasmJsepWasmUrl from 'onnxruntime-web/ort-wasm-simd-threaded.jsep.wasm?url';
 import { BeatGrid } from '../types';
 
 const DEFAULT_BPM = 120;
@@ -357,7 +359,16 @@ const loadBeatThisSession = async (): Promise<ort.InferenceSession> => {
   if (!beatThisSessionPromise) {
     beatThisSessionPromise = (async () => {
       if (ort.env?.wasm) {
-        ort.env.wasm.numThreads = Math.max(1, Math.min(4, navigator.hardwareConcurrency || 1));
+        // Force explicit wasm asset URLs so Vite/Electron doesn't resolve them to HTML fallback pages.
+        (ort.env.wasm as any).wasmPaths = {
+          mjs: ortWasmJsepMjsUrl,
+          wasm: ortWasmJsepWasmUrl
+        };
+        const canUseWasmThreads =
+          typeof self !== 'undefined' && (self as any).crossOriginIsolated === true;
+        ort.env.wasm.numThreads = canUseWasmThreads
+          ? Math.max(1, Math.min(4, navigator.hardwareConcurrency || 1))
+          : 1;
       }
 
       const modelUrl = getModelUrl();
