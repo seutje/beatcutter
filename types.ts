@@ -53,7 +53,8 @@ export interface SavedProject {
   tracks: TimelineTrack[];
   beatGrid: BeatGrid;
   waveform: number[];
-  introSkipFrames: number;
+  phaseOffsetSec?: number;
+  introSkipFrames?: number; // Legacy field for older project files.
   duration: TimeMS;
   zoom: number;
   useProxies: boolean;

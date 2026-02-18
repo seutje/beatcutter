@@ -24,7 +24,7 @@ const App: React.FC = () => {
   ]);
   const [beatGrid, setBeatGrid] = useState<BeatGrid>({ bpm: 120, offset: 0, beats: [] });
   const [waveform, setWaveform] = useState<number[]>([]);
-  const [introSkipFrames, setIntroSkipFrames] = useState<number>(0);
+  const [phaseOffsetSec, setPhaseOffsetSec] = useState<number>(0);
   const [playbackState, setPlaybackState] = useState<PlaybackState>({
     isPlaying: false,
     currentTime: 0,
@@ -42,7 +42,7 @@ const App: React.FC = () => {
   const [autoSyncOpen, setAutoSyncOpen] = useState<boolean>(false);
   const [autoSyncBpm, setAutoSyncBpm] = useState<number>(120);
   const [autoSyncBars, setAutoSyncBars] = useState<number>(4);
-  const [autoSyncIntroSkipFrames, setAutoSyncIntroSkipFrames] = useState<number>(0);
+  const [autoSyncPhaseOffsetSec, setAutoSyncPhaseOffsetSec] = useState<number>(0);
   const [autoSyncError, setAutoSyncError] = useState<string | null>(null);
   const [autoSyncAnalyzing, setAutoSyncAnalyzing] = useState<boolean>(false);
   const [exportOpen, setExportOpen] = useState<boolean>(false);
@@ -80,6 +80,15 @@ const App: React.FC = () => {
   const handleZoomChange = useCallback((nextZoom: number) => {
     setZoom(clampZoom(nextZoom));
   }, [clampZoom]);
+
+  const normalizePhaseOffset = useCallback((valueSec: number, bpm: number) => {
+      if (!Number.isFinite(valueSec)) return 0;
+      const safeBpm = Number.isFinite(bpm) && bpm > 0 ? bpm : 120;
+      const secondsPerBeat = 60 / safeBpm;
+      if (!Number.isFinite(secondsPerBeat) || secondsPerBeat <= 0) return Math.max(0, valueSec);
+      const normalized = ((valueSec % secondsPerBeat) + secondsPerBeat) % secondsPerBeat;
+      return Number(normalized.toFixed(6));
+  }, []);
 
   const encodePathForUrl = useCallback((filePath: string) => {
       const normalized = filePath.replace(/\\/g, '/');
@@ -280,7 +289,7 @@ const App: React.FC = () => {
                  masterAudioBufferRef.current = buffer;
                  const analysis = await analyzeBeats(buffer);
                  setBeatGrid(analysis);
-                 setIntroSkipFrames(0);
+                 setPhaseOffsetSec(normalizePhaseOffset(analysis.offset, analysis.bpm));
                  const waveformPoints = Math.min(4000, Math.max(600, Math.floor(buffer.duration * 60)));
                  setWaveform(generateWaveform(buffer, waveformPoints));
                  setDuration(buffer.duration * 1000);
@@ -351,7 +360,7 @@ const App: React.FC = () => {
       tracks,
       beatGrid,
       waveform,
-      introSkipFrames,
+      phaseOffsetSec,
       duration,
       zoom,
       useProxies
@@ -377,7 +386,13 @@ const App: React.FC = () => {
       setTracks(nextTracks);
       setBeatGrid(nextBeatGrid);
       setWaveform(Array.isArray(payload.waveform) ? payload.waveform : []);
-      setIntroSkipFrames(Number.isFinite(payload.introSkipFrames) ? payload.introSkipFrames : 0);
+      const loadedPhaseOffset =
+          Number.isFinite(payload.phaseOffsetSec)
+              ? Number(payload.phaseOffsetSec)
+              : Number.isFinite(payload.introSkipFrames)
+                  ? Number(payload.introSkipFrames) / DEFAULT_FPS
+                  : nextBeatGrid.offset;
+      setPhaseOffsetSec(normalizePhaseOffset(loadedPhaseOffset, nextBeatGrid.bpm));
       setDuration(Number.isFinite(payload.duration) ? payload.duration : 30000);
       setZoom(clampZoom(Number.isFinite(payload.zoom) ? payload.zoom : DEFAULT_ZOOM));
       setUseProxies(Boolean(payload.useProxies));
@@ -413,7 +428,7 @@ const App: React.FC = () => {
       if (!silent) {
           setProjectIoStatus(`Loaded project from ${filePath}`);
       }
-  }, [clampZoom, decodeAudioWithFallback, toFileUrl, toPlaybackUrl]);
+  }, [clampZoom, decodeAudioWithFallback, normalizePhaseOffset, toFileUrl, toPlaybackUrl]);
 
   const loadProjectFromPath = useCallback(async (filePath: string, silent?: boolean) => {
       if (!window.electronAPI?.project?.load) {
@@ -520,7 +535,7 @@ const App: React.FC = () => {
       ]);
       setBeatGrid({ bpm: 120, offset: 0, beats: [] });
       setWaveform([]);
-      setIntroSkipFrames(0);
+      setPhaseOffsetSec(0);
       setDuration(30000);
       setSelectedSegmentId(null);
       setSelectedMediaClipId(null);
@@ -529,6 +544,7 @@ const App: React.FC = () => {
       setAutoSyncOpen(false);
       setAutoSyncError(null);
       setAutoSyncAnalyzing(false);
+      setAutoSyncPhaseOffsetSec(0);
       setPlaybackState(prev => ({ ...prev, isPlaying: false, currentTime: 0 }));
       setProjectName('My Beat Video');
       setProjectIoStatus('Started a new project.');
@@ -597,7 +613,8 @@ const App: React.FC = () => {
           masterAudioBufferRef.current = null;
           setWaveform([]);
           setBeatGrid({ bpm: 120, offset: 0, beats: [] });
-          setIntroSkipFrames(0);
+          setPhaseOffsetSec(0);
+          setAutoSyncPhaseOffsetSec(0);
           setDuration(30000);
       }
       if (selectedMediaClipId === id) {
@@ -939,13 +956,13 @@ const App: React.FC = () => {
       const clampedBars = Math.min(32, Math.max(0.25, requestedBars));
       const desiredDuration = barDurationMs > 0 ? clampedBars * barDurationMs : clip.duration;
       const durationMs = Math.min(clip.duration, Math.max(1, desiredDuration));
-      const introSkipMs = Math.max(0, introSkipFrames) / DEFAULT_FPS * 1000;
+      const phaseOffsetMs = Math.max(0, phaseOffsetSec) * 1000;
       const segmentId = uuidv4();
 
       setTracks(prev => prev.map(t => {
           if (t.type !== 'video') return t;
           const lastEnd = t.segments.reduce((max, seg) => Math.max(max, seg.timelineStart + seg.duration), 0);
-          const timelineStart = t.segments.length > 0 ? lastEnd : introSkipMs;
+          const timelineStart = t.segments.length > 0 ? lastEnd : phaseOffsetMs;
           const nextSegment: ClipSegment = {
               id: segmentId,
               sourceClipId: clip.id,
@@ -973,7 +990,7 @@ const App: React.FC = () => {
 
   const openAutoSyncDialog = () => {
       setAutoSyncBpm(Number.isFinite(beatGrid.bpm) ? beatGrid.bpm : 120);
-      setAutoSyncIntroSkipFrames(introSkipFrames);
+      setAutoSyncPhaseOffsetSec(phaseOffsetSec);
       setAutoSyncError(null);
       setAutoSyncOpen(true);
       setOptionsOpen(false);
@@ -1047,12 +1064,12 @@ const App: React.FC = () => {
           const shortestClipSec = clipDurationsSec.length > 0 ? Math.min(...clipDurationsSec) : 0;
           const prompt = [
               'Analyze this audio track and return a JSON object with these fields:',
-              'bpm (number), clip_length_bars (number), intro_skip_frames (number).',
+              'bpm (number), clip_length_bars (number), phase_offset_seconds (number).',
               `Imported video clip durations in seconds: ${clipDurationsSec.map(sec => sec.toFixed(2)).join(', ') || 'none'}.`,
               `Shortest clip length is ${shortestClipSec.toFixed(2)}s.`,
               'Choose clip_length_bars so that the clip length in seconds (bars * 60 * 4 / bpm) does not exceed the shortest clip length.',
-              'intro_skip_frames means the number of frames to skip before the first beat so the first clip starts at that frame and all cuts line up with the beats and especially with the drop.',
-              'intro_skip_frames should never be more than 4 bars.',
+              'phase_offset_seconds means beat-grid phase offset in seconds within one beat period.',
+              'phase_offset_seconds should usually stay within one beat period.',
               'If unsure, provide best estimates. Return JSON only.'
           ].join(' ');
 
@@ -1101,9 +1118,15 @@ const App: React.FC = () => {
               throw new Error('Gemini response was not valid JSON.');
           }
 
-          if (Number.isFinite(parsed.bpm)) setAutoSyncBpm(Number(parsed.bpm));
+          const parsedBpm = Number.isFinite(parsed.bpm) ? Number(parsed.bpm) : autoSyncBpm;
+          if (Number.isFinite(parsed.bpm)) setAutoSyncBpm(parsedBpm);
           if (Number.isFinite(parsed.clip_length_bars)) setAutoSyncBars(Math.round(Number(parsed.clip_length_bars)));
-          if (Number.isFinite(parsed.intro_skip_frames)) setAutoSyncIntroSkipFrames(Math.round(Number(parsed.intro_skip_frames)));
+          if (Number.isFinite(parsed.phase_offset_seconds)) {
+              setAutoSyncPhaseOffsetSec(normalizePhaseOffset(Number(parsed.phase_offset_seconds), parsedBpm));
+          } else if (Number.isFinite(parsed.intro_skip_frames)) {
+              const legacySec = Number(parsed.intro_skip_frames) / DEFAULT_FPS;
+              setAutoSyncPhaseOffsetSec(normalizePhaseOffset(legacySec, parsedBpm));
+          }
       } catch (err) {
           setAutoSyncError(err instanceof Error ? err.message : 'Gemini analysis failed.');
       } finally {
@@ -1120,18 +1143,8 @@ const App: React.FC = () => {
 
       const clampedBpm = Math.min(300, Math.max(30, Number(autoSyncBpm)));
       const clampedBars = Math.min(32, Math.max(1, Math.round(Number(autoSyncBars))));
-      const nextIntroSkipFrames = Math.round(Number(autoSyncIntroSkipFrames));
-
-      const baseOffset = 0;
-      const nextIntroSkipSec = nextIntroSkipFrames / DEFAULT_FPS;
-      const rebuilt = buildBeatGrid(clampedBpm, baseOffset, duration / 1000);
-      const shiftedBeats = rebuilt.beats.map(beat => Math.max(0, beat + nextIntroSkipSec));
-      const nextBeatGrid = {
-          ...rebuilt,
-          offset: rebuilt.offset + nextIntroSkipSec,
-          beats: [...new Set(shiftedBeats)].sort((a, b) => a - b),
-          bpm: clampedBpm
-      };
+      const nextPhaseOffsetSec = normalizePhaseOffset(Number(autoSyncPhaseOffsetSec), clampedBpm);
+      const nextBeatGrid = buildBeatGrid(clampedBpm, nextPhaseOffsetSec, duration / 1000);
 
       if (nextBeatGrid.beats.length === 0) {
           setAutoSyncError('No beats detected after applying settings.');
@@ -1139,7 +1152,7 @@ const App: React.FC = () => {
       }
 
       setBeatGrid(nextBeatGrid);
-      setIntroSkipFrames(nextIntroSkipFrames);
+      setPhaseOffsetSec(nextPhaseOffsetSec);
 
       const newSegments = autoSyncClips(videoClips, nextBeatGrid, duration, clampedBars);
       setTracks(prev => prev.map(t =>
@@ -1148,19 +1161,10 @@ const App: React.FC = () => {
       setAutoSyncOpen(false);
   };
 
-  const buildAutoSyncPreviewGrid = (nextBpm: number, nextIntroSkipFrames: number) => {
+  const buildAutoSyncPreviewGrid = (nextBpm: number, nextPhaseOffsetSec: number) => {
       const clampedBpm = Math.min(300, Math.max(30, Number(nextBpm)));
-      const normalizedIntroSkipFrames = Math.round(Number(nextIntroSkipFrames));
-      const baseOffset = 0;
-      const introSkipSec = normalizedIntroSkipFrames / DEFAULT_FPS;
-      const rebuilt = buildBeatGrid(clampedBpm, baseOffset, duration / 1000);
-      const shiftedBeats = rebuilt.beats.map(beat => Math.max(0, beat + introSkipSec));
-      return {
-          ...rebuilt,
-          offset: rebuilt.offset + introSkipSec,
-          beats: [...new Set(shiftedBeats)].sort((a, b) => a - b),
-          bpm: clampedBpm
-      };
+      const normalizedPhaseOffset = normalizePhaseOffset(Number(nextPhaseOffsetSec), clampedBpm);
+      return buildBeatGrid(clampedBpm, normalizedPhaseOffset, duration / 1000);
   };
 
   const togglePlay = () => {
@@ -1302,45 +1306,22 @@ const App: React.FC = () => {
       }));
   };
 
-  const handleUpdateIntroSkipFrames = (nextFrames: number) => {
+  const handleUpdatePhaseOffsetSec = (nextPhaseOffsetSec: number) => {
+      const normalized = normalizePhaseOffset(nextPhaseOffsetSec, beatGrid.bpm);
+      setPhaseOffsetSec(normalized);
       if (beatGrid.beats.length === 0) {
-          setIntroSkipFrames(Math.round(nextFrames));
           return;
       }
-      const clampedFrames = Math.round(nextFrames);
-      const deltaFrames = clampedFrames - introSkipFrames;
-      if (deltaFrames === 0) {
-          setIntroSkipFrames(clampedFrames);
-          return;
-      }
-      const deltaSec = deltaFrames / DEFAULT_FPS;
-       setBeatGrid((prev: BeatGrid) => {
-           const shiftedBeats = prev.beats.map(beat => Math.max(0, beat + (deltaSec as number)));
-           return {
-               ...prev,
-               offset: prev.offset + (deltaSec as number),
-               beats: [...new Set(shiftedBeats)].sort((a: number, b: number) => a - b)
-           };
-       });
-      setIntroSkipFrames(clampedFrames);
+      setBeatGrid(prev => buildBeatGrid(prev.bpm, normalizePhaseOffset(nextPhaseOffsetSec, prev.bpm), duration / 1000));
   };
 
   const handleUpdateBpm = useCallback((nextBpm: number) => {
       if (!Number.isFinite(nextBpm)) return;
       const clampedBpm = Math.min(300, Math.max(30, nextBpm));
-      const introSkipSec = introSkipFrames / DEFAULT_FPS;
-      setBeatGrid(prev => {
-          const baseOffset = prev.offset - introSkipSec;
-          const rebuilt = buildBeatGrid(clampedBpm, baseOffset, duration / 1000);
-          const shiftedBeats = rebuilt.beats
-              .map(beat => Math.max(0, beat + introSkipSec));
-          return {
-              ...rebuilt,
-              offset: rebuilt.offset + introSkipSec,
-              beats: [...new Set(shiftedBeats)].sort((a, b) => a - b),
-          };
-      });
-  }, [duration, introSkipFrames]);
+      const normalizedPhaseOffset = normalizePhaseOffset(phaseOffsetSec, clampedBpm);
+      setBeatGrid(buildBeatGrid(clampedBpm, normalizedPhaseOffset, duration / 1000));
+      setPhaseOffsetSec(normalizedPhaseOffset);
+  }, [duration, normalizePhaseOffset, phaseOffsetSec]);
 
   const handleUpdateBarLength = useCallback((barLengthSec: number) => {
       if (!Number.isFinite(barLengthSec) || barLengthSec <= 0) return;
@@ -1730,7 +1711,7 @@ const App: React.FC = () => {
               outputDurationFixedSec: Number(outputDurationFixedSec.toFixed(6)),
               outputDurationTargetSec: Number(outputDurationTargetSec.toFixed(6)),
                audioTrimStartSec: Number(audioTrimStartSec.toFixed(6)),
-               introSkipFrames,
+               phaseOffsetSec,
               audioDelayMs,
               audioDelaySpec,
               audioClipName: audioClipForExport?.name ?? '',
@@ -1828,35 +1809,13 @@ const App: React.FC = () => {
       let unsubscribeProgress: (() => void) | null = null;
 
       try {
-          const introSkipSec = introSkipFrames / DEFAULT_FPS;
           const outputDir = getDirName(audioClip.filePath);
           const outputBaseStem = stripExtension(getBaseName(audioClip.filePath));
           const exportTimestamp = Math.floor(Date.now() / 1000);
           const outputFileName = `${outputBaseStem} - exported - ${exportTimestamp}.wav`;
           const outputPath = joinPath(outputDir, outputFileName);
 
-          const args: string[] = ['-loglevel', 'info', '-y'];
-          const filterComplexParts: string[] = [];
-
-          if (introSkipFrames > 0) {
-              // Trim audio
-              args.push('-i', audioClip.filePath);
-              filterComplexParts.push(`atrim=start=${introSkipSec.toFixed(6)},asetpts=PTS-STARTPTS`);
-          } else if (introSkipFrames < 0) {
-              // Pad audio
-              args.push('-i', audioClip.filePath);
-              const padSec = Math.abs(introSkipSec);
-              filterComplexParts.push(`adelay=${(padSec * 1000).toFixed(0)}|${(padSec * 1000).toFixed(0)}`);
-          } else {
-              args.push('-i', audioClip.filePath);
-              filterComplexParts.push('acopy');
-          }
-
-          if (filterComplexParts.length > 0 && filterComplexParts[0] !== 'acopy') {
-              args.push('-af', filterComplexParts.join(','));
-          }
-
-          args.push(outputPath);
+          const args: string[] = ['-loglevel', 'info', '-y', '-i', audioClip.filePath, outputPath];
 
           unsubscribeProgress = onFfmpegProgress((progress) => {
               if (progress.jobId !== jobId) return;
@@ -1868,7 +1827,7 @@ const App: React.FC = () => {
           const result = await runFfmpeg({
               jobId,
               args,
-              durationSec: audioClip.duration / 1000 + (introSkipFrames < 0 ? Math.abs(introSkipSec) : 0)
+              durationSec: audioClip.duration / 1000
           });
 
           if (result.exitCode !== 0 || result.signal) {
@@ -1948,8 +1907,8 @@ const App: React.FC = () => {
                     clips={clips}
                     playbackState={playbackState} 
                     beatGrid={
-                      autoSyncOpen && Number.isFinite(autoSyncBpm) && Number.isFinite(autoSyncIntroSkipFrames)
-                        ? buildAutoSyncPreviewGrid(autoSyncBpm, autoSyncIntroSkipFrames)
+                      autoSyncOpen && Number.isFinite(autoSyncBpm) && Number.isFinite(autoSyncPhaseOffsetSec)
+                        ? buildAutoSyncPreviewGrid(autoSyncBpm, autoSyncPhaseOffsetSec)
                         : beatGrid
                     }
                     waveform={waveform}
@@ -1977,8 +1936,8 @@ const App: React.FC = () => {
             insertBeforeMode={insertBeforeMode}
             insertBeforeSourceId={insertBeforeSourceId}
             onToggleInsertBeforeMode={handleToggleInsertBeforeMode}
-            introSkipFrames={introSkipFrames}
-            onUpdateIntroSkipFrames={handleUpdateIntroSkipFrames}
+            phaseOffsetSec={phaseOffsetSec}
+            onUpdatePhaseOffsetSec={handleUpdatePhaseOffsetSec}
             bpm={beatGrid.bpm}
             barLengthSec={(60 / beatGrid.bpm) * BEATS_PER_BAR}
             onUpdateBpm={handleUpdateBpm}
@@ -2040,11 +1999,12 @@ const App: React.FC = () => {
                 </div>
 
                 <label className="text-xs text-stone-400 uppercase tracking-wide">
-                  Intro Skip (frames)
+                  Phase Offset (s)
                   <input
                     type="number"
-                    value={autoSyncIntroSkipFrames}
-                    onChange={(e) => setAutoSyncIntroSkipFrames(Number(e.target.value))}
+                    step={0.001}
+                    value={autoSyncPhaseOffsetSec}
+                    onChange={(e) => setAutoSyncPhaseOffsetSec(normalizePhaseOffset(Number(e.target.value), autoSyncBpm))}
                     className="mt-2 w-full bg-stone-800 border border-stone-700 rounded px-2 py-1 text-sm text-stone-200"
                   />
                 </label>
@@ -2066,7 +2026,7 @@ const App: React.FC = () => {
                     type="button"
                     onClick={() => {
                       setAutoSyncBpm(beatGrid.bpm);
-                      setAutoSyncIntroSkipFrames(introSkipFrames);
+                      setAutoSyncPhaseOffsetSec(phaseOffsetSec);
                       setAutoSyncBars(4);
                     }}
                     className="px-3 py-2 text-sm text-stone-400 hover:text-stone-200"

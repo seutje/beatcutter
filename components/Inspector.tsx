@@ -1,5 +1,6 @@
 import React from 'react';
 import { ClipSegment, FadeRange, SourceClip, TimelineTrack } from '../types';
+import { DEFAULT_FPS } from '../constants';
 
 interface InspectorProps {
     selectedSegmentId: string | null;
@@ -14,8 +15,8 @@ interface InspectorProps {
     insertBeforeMode: boolean;
     insertBeforeSourceId: string | null;
     onToggleInsertBeforeMode: (id: string) => void;
-    introSkipFrames: number;
-    onUpdateIntroSkipFrames: (frames: number) => void;
+    phaseOffsetSec: number;
+    onUpdatePhaseOffsetSec: (seconds: number) => void;
     bpm: number;
     barLengthSec: number;
     onUpdateBpm: (bpm: number) => void;
@@ -39,8 +40,8 @@ const Inspector: React.FC<InspectorProps> = ({
     insertBeforeMode,
     insertBeforeSourceId,
     onToggleInsertBeforeMode,
-    introSkipFrames,
-    onUpdateIntroSkipFrames,
+    phaseOffsetSec,
+    onUpdatePhaseOffsetSec,
     bpm,
     barLengthSec,
     onUpdateBpm,
@@ -353,31 +354,32 @@ const Inspector: React.FC<InspectorProps> = ({
 
                 {sourceClip.type === 'audio' && (
                     <div>
-                        <label className="block text-xs text-stone-500 mb-2 uppercase">Intro skip</label>
+                        <label className="block text-xs text-stone-500 mb-2 uppercase">Phase Offset (s)</label>
                         <div className="flex items-center gap-2">
                             <button
                                 type="button"
-                                onClick={() => onUpdateIntroSkipFrames(introSkipFrames - 1)}
+                                onClick={() => onUpdatePhaseOffsetSec(phaseOffsetSec - (1 / DEFAULT_FPS))}
                                 className="w-8 h-8 rounded bg-stone-800 border border-stone-700 text-stone-200 hover:bg-stone-700"
                             >
                                 -
                             </button>
                             <input
                                 type="number"
-                                value={introSkipFrames}
-                                onChange={(e) => onUpdateIntroSkipFrames(Number(e.target.value))}
+                                step={0.001}
+                                value={phaseOffsetSec}
+                                onChange={(e) => onUpdatePhaseOffsetSec(Number(e.target.value))}
                                 className="w-full bg-stone-800 border border-stone-700 rounded px-2 py-1 text-sm text-stone-200"
                             />
                             <button
                                 type="button"
-                                onClick={() => onUpdateIntroSkipFrames(introSkipFrames + 1)}
+                                onClick={() => onUpdatePhaseOffsetSec(phaseOffsetSec + (1 / DEFAULT_FPS))}
                                 className="w-8 h-8 rounded bg-stone-800 border border-stone-700 text-stone-200 hover:bg-stone-700"
                             >
                                 +
                             </button>
                         </div>
                         <p className="text-xs text-stone-500 mt-2 leading-relaxed">
-                            Adjust the beat grid so the first beat lands on the right frame.
+                            Shift beat grid phase relative to the audio while keeping constant BPM.
                         </p>
                     </div>
                 )}
@@ -392,7 +394,7 @@ const Inspector: React.FC<InspectorProps> = ({
                             <span>Export Audio</span>
                         </button>
                         <p className="text-[10px] text-stone-500 mt-2 text-center">
-                            Exports audio respecting intro skip trim/pad.
+                            Exports audio as-is. Phase offset only affects beat grid alignment.
                         </p>
                     </div>
                 )}
