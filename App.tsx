@@ -278,7 +278,7 @@ const App: React.FC = () => {
                if (!masterAudioBufferRef.current && duration > 0) {
                  const buffer = await decodeAudioWithFallback(urlCandidates);
                  masterAudioBufferRef.current = buffer;
-                 const analysis = analyzeBeats(buffer);
+                 const analysis = await analyzeBeats(buffer);
                  setBeatGrid(analysis);
                  setIntroSkipFrames(0);
                  const waveformPoints = Math.min(4000, Math.max(600, Math.floor(buffer.duration * 60)));

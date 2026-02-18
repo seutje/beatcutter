@@ -6,6 +6,17 @@
 2. Run the app (Electron + Vite):
    `npm run dev`
 
+## BeatThis Model Setup
+1. Clone BeatThis:
+   `git clone https://github.com/CPJKU/beat_this.git /tmp/beat_this_repo`
+2. Install export dependencies in a Python environment:
+   `pip install soxr einops rotary_embedding_torch torchaudio tqdm onnx onnxscript`
+3. Export the ONNX model:
+   `PYTHONPATH=/tmp/beat_this_repo python scripts/export_beatthis_onnx.py --checkpoint small0 --out public/models/beatthis-small0.onnx`
+4. Ensure the output exists at:
+   `public/models/beatthis-small0.onnx`
+5. Start Beatcutter; importing audio now uses BeatThis + ONNX Runtime Web for beat detection.
+
 ## Build
 - Build renderer + Electron main process:
   `npm run build`
