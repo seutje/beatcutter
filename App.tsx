@@ -43,6 +43,7 @@ const App: React.FC = () => {
   const [autoSyncBpm, setAutoSyncBpm] = useState<number>(120);
   const [autoSyncBars, setAutoSyncBars] = useState<number>(4);
   const [autoSyncPhaseOffsetSec, setAutoSyncPhaseOffsetSec] = useState<number>(0);
+  const [autoSyncExtendFirstClip, setAutoSyncExtendFirstClip] = useState<boolean>(false);
   const [autoSyncError, setAutoSyncError] = useState<string | null>(null);
   const [autoSyncAnalyzing, setAutoSyncAnalyzing] = useState<boolean>(false);
   const [exportOpen, setExportOpen] = useState<boolean>(false);
@@ -587,6 +588,7 @@ const App: React.FC = () => {
       setAutoSyncError(null);
       setAutoSyncAnalyzing(false);
       setAutoSyncPhaseOffsetSec(0);
+      setAutoSyncExtendFirstClip(false);
       setAudioBeatDetectionRunning(false);
       setPlaybackState(prev => ({ ...prev, isPlaying: false, currentTime: 0 }));
       setProjectName('My Beat Video');
@@ -1198,7 +1200,27 @@ const App: React.FC = () => {
       setBeatGrid(nextBeatGrid);
       setPhaseOffsetSec(nextPhaseOffsetSec);
 
-      const newSegments = autoSyncClips(videoClips, nextBeatGrid, duration, clampedBars);
+      let newSegments = autoSyncClips(videoClips, nextBeatGrid, duration, clampedBars);
+      if (autoSyncExtendFirstClip && nextPhaseOffsetSec > 0 && newSegments.length > 0) {
+          const firstSegment = newSegments.reduce((earliest, segment) =>
+              segment.timelineStart < earliest.timelineStart ? segment : earliest
+          );
+          const gapMs = Math.min(
+              Math.max(0, firstSegment.timelineStart),
+              Math.max(0, nextPhaseOffsetSec) * 1000
+          );
+          if (gapMs > 0) {
+              newSegments = newSegments.map((segment) =>
+                  segment.id === firstSegment.id
+                      ? {
+                          ...segment,
+                          timelineStart: segment.timelineStart - gapMs,
+                          duration: segment.duration + gapMs
+                      }
+                      : segment
+              );
+          }
+      }
       setTracks(prev => prev.map(t =>
         t.type === 'video' ? { ...t, segments: newSegments } : t
       ));
@@ -2043,16 +2065,27 @@ const App: React.FC = () => {
                   </label>
                 </div>
 
-                <label className="text-xs text-stone-400 uppercase tracking-wide">
-                  Phase Offset (s)
-                  <input
-                    type="number"
-                    step={0.001}
-                    value={autoSyncPhaseOffsetSec}
-                    onChange={(e) => setAutoSyncPhaseOffsetSec(normalizePhaseOffset(Number(e.target.value), autoSyncBpm))}
-                    className="mt-2 w-full bg-stone-800 border border-stone-700 rounded px-2 py-1 text-sm text-stone-200"
-                  />
-                </label>
+                <div className="flex items-end gap-3">
+                  <label className="flex-1 text-xs text-stone-400 uppercase tracking-wide">
+                    Phase Offset (s)
+                    <input
+                      type="number"
+                      step={0.001}
+                      value={autoSyncPhaseOffsetSec}
+                      onChange={(e) => setAutoSyncPhaseOffsetSec(normalizePhaseOffset(Number(e.target.value), autoSyncBpm))}
+                      className="mt-2 w-full bg-stone-800 border border-stone-700 rounded px-2 py-1 text-sm text-stone-200"
+                    />
+                  </label>
+                  <label className="mb-1 flex items-center gap-2 text-xs text-stone-300 normal-case tracking-normal">
+                    <input
+                      type="checkbox"
+                      checked={autoSyncExtendFirstClip}
+                      onChange={(e) => setAutoSyncExtendFirstClip(e.target.checked)}
+                      className="h-4 w-4 rounded border-stone-600 bg-stone-800 text-amber-500 focus:ring-amber-500/40"
+                    />
+                    Extend first clip
+                  </label>
+                </div>
 
                 <div className="flex items-center justify-between gap-3">
                   <button
@@ -2073,6 +2106,7 @@ const App: React.FC = () => {
                       setAutoSyncBpm(beatGrid.bpm);
                       setAutoSyncPhaseOffsetSec(phaseOffsetSec);
                       setAutoSyncBars(4);
+                      setAutoSyncExtendFirstClip(false);
                     }}
                     className="px-3 py-2 text-sm text-stone-400 hover:text-stone-200"
                   >
