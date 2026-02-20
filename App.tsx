@@ -1665,7 +1665,7 @@ const App: React.FC = () => {
           const useCfrExport = forceCfrOutput || frameAligned;
           const useOutputFpsFilter = useCfrExport && !applyCfrPerSegment;
           const outputDurationTargetSec = audioDurationSec > 0
-              ? outputDurationSec
+              ? Math.max(outputDurationSec, audioDurationSec)
               : (useCfrExport ? outputDurationFixedSec : outputDurationSec);
           const tailPadSecRaw = outputDurationTargetSec > 0 && outputDurationTargetSec > outputDurationSec
               ? outputDurationTargetSec - outputDurationSec
@@ -1684,6 +1684,9 @@ const App: React.FC = () => {
               : audioPadSecRaw;
           const audioFilter = '';
           const tailPadFrames = frameAligned ? Math.round(tailPadSec * frameRate) : 0;
+          const outputTargetFrames = frameAligned && outputDurationTargetSec > 0
+              ? Math.max(exportEndFrames, Math.ceil(outputDurationTargetSec * frameRate))
+              : exportEndFrames;
           const videoPadFilter = (frameAligned && tailPadFrames > 0)
               ? `tpad=stop=${tailPadFrames}:stop_mode=add:color=black,`
               : (tailPadSec > 0 ? `tpad=stop_duration=${formatSec(tailPadSec)}:stop_mode=add:color=black,` : '');
@@ -1753,8 +1756,8 @@ const App: React.FC = () => {
           const fpsArgs = useCfrExport
               ? ['-vsync', 'cfr', '-r', `${DEFAULT_FPS}`, '-video_track_timescale', `${Math.round(DEFAULT_FPS * 1000)}`]
               : ['-vsync', 'vfr'];
-          if (frameAligned && exportEndFrames > 0) {
-              args.push('-frames:v', `${exportEndFrames}`);
+          if (frameAligned && outputTargetFrames > 0) {
+              args.push('-frames:v', `${outputTargetFrames}`);
           }
           args.push(
               '-c:v', 'libx264',
@@ -1796,6 +1799,7 @@ const App: React.FC = () => {
               timelineEndFramesExact: Number(timelineEndFramesExact.toFixed(6)),
               timelineEndFramesRounded,
               exportEndFrames,
+              outputTargetFrames,
               exportFrameDriftFrames: Number(exportFrameDriftFrames.toFixed(6)),
               totalTimelineFramesExact: Number(totalTimelineFramesExact.toFixed(6)),
               totalGapFramesExact: Number(totalGapFramesExact.toFixed(6)),
