@@ -732,23 +732,63 @@ const estimateBpm = (beatTimes: number[]): number => {
   return Number(finalBpm.toFixed(2));
 };
 
+const normalizePhase = (value: number, period: number): number =>
+  ((value % period) + period) % period;
+
+const circularPhaseDistance = (a: number, b: number, period: number): number => {
+  const direct = Math.abs(a - b);
+  return Math.min(direct, period - direct);
+};
+
 const estimateConstantOffset = (beatTimes: number[], secondsPerBeat: number): number => {
   if (beatTimes.length === 0 || !Number.isFinite(secondsPerBeat) || secondsPerBeat <= 0) {
     return 0;
   }
 
+  const phases = beatTimes.map((time) => normalizePhase(time, secondsPerBeat));
+  if (phases.length === 1) {
+    return phases[0];
+  }
+
+  // Robustly select the dominant phase cluster to avoid off-beat/harmonic peaks
+  // pulling the offset toward a doubled value.
+  const toleranceSec = Math.max(0.02, Math.min(0.08, secondsPerBeat * 0.2));
+  let bestPhase = phases[0];
+  let bestInlierCount = 0;
+  let bestDistanceSum = Number.POSITIVE_INFINITY;
+  for (const candidate of phases) {
+    let inlierCount = 0;
+    let distanceSum = 0;
+    for (const phase of phases) {
+      const distance = circularPhaseDistance(phase, candidate, secondsPerBeat);
+      if (distance <= toleranceSec) {
+        inlierCount += 1;
+        distanceSum += distance;
+      }
+    }
+    if (
+      inlierCount > bestInlierCount ||
+      (inlierCount === bestInlierCount && distanceSum < bestDistanceSum)
+    ) {
+      bestPhase = candidate;
+      bestInlierCount = inlierCount;
+      bestDistanceSum = distanceSum;
+    }
+  }
+
   let sumSin = 0;
   let sumCos = 0;
-  for (const time of beatTimes) {
-    const phase = ((time % secondsPerBeat) + secondsPerBeat) % secondsPerBeat;
+  for (const phase of phases) {
+    if (circularPhaseDistance(phase, bestPhase, secondsPerBeat) > toleranceSec) {
+      continue;
+    }
     const angle = (phase / secondsPerBeat) * Math.PI * 2;
     sumSin += Math.sin(angle);
     sumCos += Math.cos(angle);
   }
 
-  // If the circular mean is undefined, fall back to first detected beat phase.
   if (Math.abs(sumSin) < 1e-8 && Math.abs(sumCos) < 1e-8) {
-    return ((beatTimes[0] % secondsPerBeat) + secondsPerBeat) % secondsPerBeat;
+    return bestPhase;
   }
 
   let meanAngle = Math.atan2(sumSin, sumCos);
