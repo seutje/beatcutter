@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { SourceClip, TimelineTrack, BeatGrid, PlaybackState, ClipSegment, SavedProject, SerializableClip } from './types';
 import { decodeAudio, analyzeBeats, buildBeatGrid, generateWaveform } from './services/audioUtils';
-import { runFfmpeg, onFfmpegProgress } from './services/ffmpegBridge';
+import { runFfmpeg, onFfmpegProgress, probeVideoBitrate } from './services/ffmpegBridge';
 import { runProxy, cancelProxy } from './services/proxyManager';
 import { autoSyncClips } from './services/syncEngine';
 import { DEFAULT_ZOOM, DEFAULT_FPS, BEATS_PER_BAR, TIMELINE_ZOOM_MIN, TIMELINE_ZOOM_MAX } from './constants';
@@ -47,6 +47,8 @@ const App: React.FC = () => {
   const [autoSyncError, setAutoSyncError] = useState<string | null>(null);
   const [autoSyncAnalyzing, setAutoSyncAnalyzing] = useState<boolean>(false);
   const [exportOpen, setExportOpen] = useState<boolean>(false);
+  const [exportMode, setExportMode] = useState<'timeline' | 'clip' | 'audio'>('timeline');
+  const [exportTargetName, setExportTargetName] = useState<string | null>(null);
   const [exportResolution, setExportResolution] = useState<string>('1920x1080');
   const [exportMbps, setExportMbps] = useState<number>(12);
   const [exporting, setExporting] = useState<boolean>(false);
@@ -1048,6 +1050,8 @@ const App: React.FC = () => {
   };
 
   const openExportDialog = () => {
+      setExportMode('timeline');
+      setExportTargetName(null);
       setExportProgress(0);
       setExportError(null);
       setExportOpen(true);
@@ -1057,7 +1061,18 @@ const App: React.FC = () => {
   const closeExportDialog = () => {
       if (exporting) return;
       setExportOpen(false);
+      setExportMode('timeline');
+      setExportTargetName(null);
       setExportError(null);
+  };
+
+  const openExportStatus = (mode: 'timeline' | 'clip' | 'audio', targetName?: string | null) => {
+      setExportMode(mode);
+      setExportTargetName(targetName ?? null);
+      setExportProgress(0);
+      setExportError(null);
+      setExportOpen(true);
+      setOptionsOpen(false);
   };
 
   const readFileAsDataUrl = async (filePath: string): Promise<string> => {
@@ -1396,6 +1411,136 @@ const App: React.FC = () => {
   }, [handleUpdateBpm]);
 
   // --- Export Logic (Native FFmpeg) ---
+  const handleExportVideoSegment = async (segmentId: string) => {
+      const videoSegment = tracks.find(t => t.type === 'video')?.segments.find(segment => segment.id === segmentId) ?? null;
+      const sourceClip = videoSegment ? clips.find(clip => clip.id === videoSegment.sourceClipId) ?? null : null;
+
+      openExportStatus('clip', sourceClip?.name ?? null);
+
+      if (!videoSegment || !sourceClip || sourceClip.type !== 'video') {
+          setExportError('Select a video segment on the timeline to export.');
+          return;
+      }
+      if (!window.electronAPI?.ffmpeg?.run) {
+          setExportError('Export is only available in the Electron app.');
+          return;
+      }
+      if (sourceClip.filePath.startsWith('blob:') || sourceClip.filePath.startsWith('data:')) {
+          setExportError('Export requires file paths. Re-import clips in the Electron app.');
+          return;
+      }
+
+      setExporting(true);
+
+      const formatSec = (value: number) => value.toFixed(6);
+      const exportTimestamp = Math.floor(Date.now() / 1000);
+      const outputDir = getDirName(sourceClip.filePath);
+      const outputBaseStem = stripExtension(getBaseName(sourceClip.filePath)) || 'clip';
+      const outputFileName = `${outputBaseStem} - segment - ${exportTimestamp}.mp4`;
+      const outputPath = joinPath(outputDir, outputFileName);
+      const requestedRate = typeof videoSegment.playbackRate === 'number' && Number.isFinite(videoSegment.playbackRate)
+          ? Math.max(0.05, videoSegment.playbackRate)
+          : 1;
+      const availableDuration = Math.max(0, sourceClip.duration - videoSegment.sourceStartOffset);
+      const maxRate = availableDuration > 0 && videoSegment.duration > 0
+          ? availableDuration / videoSegment.duration
+          : requestedRate;
+      const effectiveRate = Math.min(requestedRate, maxRate);
+      const speedRate = Number.isFinite(effectiveRate) && effectiveRate > 0 ? effectiveRate : 1;
+      const speedFactor = 1 / speedRate;
+      const trimStartSec = videoSegment.sourceStartOffset / 1000;
+      const trimDurationSec = (videoSegment.duration * speedRate) / 1000;
+      const outputDurationSec = videoSegment.duration / 1000;
+      const fadeFilters: string[] = [];
+      const fadeIn = videoSegment.fadeIn ?? defaultFadeIn;
+      if (fadeIn.enabled) {
+          const start = Math.max(0, fadeIn.startMs);
+          const end = Math.max(start, fadeIn.endMs);
+          const durationMs = end - start;
+          const stSec = (durationMs > 0 ? start : end) / 1000;
+          const dSec = Math.max(durationMs / 1000, 0.001);
+          fadeFilters.push(`fade=t=in:st=${formatSec(stSec)}:d=${formatSec(dSec)}`);
+      }
+      const fadeOut = videoSegment.fadeOut ?? defaultFadeOut;
+      if (fadeOut.enabled) {
+          const startRaw = videoSegment.duration + fadeOut.startMs;
+          const endRaw = videoSegment.duration + fadeOut.endMs;
+          const clampedStart = Math.max(0, Math.min(videoSegment.duration, startRaw));
+          const clampedEnd = Math.max(0, Math.min(videoSegment.duration, endRaw));
+          const start = Math.min(clampedStart, clampedEnd);
+          const end = Math.max(clampedStart, clampedEnd);
+          const durationMs = end - start;
+          const stSec = (durationMs > 0 ? start : end) / 1000;
+          const dSec = Math.max(durationMs / 1000, 0.001);
+          fadeFilters.push(`fade=t=out:st=${formatSec(stSec)}:d=${formatSec(dSec)}`);
+      }
+
+      const filterChain = [
+          `trim=start=${formatSec(trimStartSec)}:duration=${formatSec(trimDurationSec)}`
+      ];
+      if (videoSegment.reverse) {
+          filterChain.push('reverse');
+      }
+      filterChain.push(
+          `setpts=(PTS-STARTPTS)*${speedFactor.toFixed(6)}`,
+          ...fadeFilters,
+          `trim=duration=${formatSec(outputDurationSec)}`,
+          'setpts=PTS-STARTPTS',
+          'format=yuv420p'
+      );
+
+      const jobId = uuidv4();
+      let unsubscribeProgress: (() => void) | null = null;
+
+      try {
+          const sourceBitrate = await probeVideoBitrate(sourceClip.filePath);
+          if (!Number.isFinite(sourceBitrate) || sourceBitrate <= 0) {
+              throw new Error('Could not determine the source clip bitrate for export.');
+          }
+
+          const args: string[] = [
+              '-loglevel', 'info',
+              '-y',
+              '-i', sourceClip.filePath,
+              '-filter_complex', `[0:v]${filterChain.join(',')}[outv]`,
+              '-map', '[outv]',
+              '-an',
+              '-c:v', 'libx264',
+              '-preset', 'ultrafast',
+              '-bf', '0',
+              '-b:v', `${Math.max(1, Math.round(sourceBitrate))}`,
+              '-pix_fmt', 'yuv420p',
+              '-movflags', '+faststart',
+              outputPath
+          ];
+
+          unsubscribeProgress = onFfmpegProgress((progress) => {
+              if (progress.jobId !== jobId) return;
+              if (!Number.isFinite(progress.progress)) return;
+              setExportProgress(Math.min(100, Math.round(progress.progress)));
+          });
+
+          const execResult = await runFfmpeg({ jobId, args, durationSec: outputDurationSec });
+          if (execResult.exitCode !== 0 || execResult.signal) {
+              throw new Error(
+                  `Export failed (ffmpeg code ${execResult.exitCode ?? 'unknown'}${execResult.signal ? `, signal ${execResult.signal}` : ''}).`
+              );
+          }
+
+          setExportProgress(100);
+          setExportOpen(false);
+      } catch (error) {
+          console.error('Clip export failed', error);
+          const message = error instanceof Error ? error.message : 'Clip export failed. Check the console for details.';
+          setExportError(message);
+      } finally {
+          if (unsubscribeProgress) {
+              unsubscribeProgress();
+          }
+          setExporting(false);
+      }
+  };
+
   const handleExport = async () => {
       const videoSegments = tracks.find(t => t.type === 'video')?.segments || [];
       if (videoSegments.length === 0) {
@@ -1860,20 +2005,19 @@ const App: React.FC = () => {
   };
 
   const handleExportAudio = async () => {
+      const audioClip = getPrimaryAudioClip(clips);
+      openExportStatus('audio', audioClip?.name ?? null);
+
       if (!window.electronAPI?.ffmpeg?.run) {
           setExportError('Export is only available in the Electron app.');
           return;
       }
-      const audioClip = getPrimaryAudioClip(clips);
       if (!audioClip) {
           setExportError('No audio clip found to export.');
           return;
       }
 
       setExporting(true);
-      setExportProgress(0);
-      setExportError(null);
-      setExportOpen(true);
 
       const jobId = uuidv4();
       let unsubscribeProgress: (() => void) | null = null;
@@ -1918,6 +2062,17 @@ const App: React.FC = () => {
   const canSaveProject = Boolean(window.electronAPI?.project?.save) && clips.some(c => c.type === 'audio');
   const canLoadProject = Boolean(window.electronAPI?.project?.selectFile) && Boolean(window.electronAPI?.project?.load);
   const canLoadLastProject = Boolean(window.electronAPI?.project?.load) && Boolean(lastProjectPath);
+  const exportDialogTitle = exportMode === 'audio'
+      ? 'Export Audio'
+      : exportMode === 'clip'
+          ? 'Export Clip'
+          : 'Export Video';
+  const exportDialogDescription = exportMode === 'audio'
+      ? 'Export the selected audio clip as-is.'
+      : exportMode === 'clip'
+          ? 'Exporting the inspected timeline segment with its current trim and slip.'
+          : 'Render the timeline with native FFmpeg.';
+  const exportTargetLabel = exportTargetName ? `"${exportTargetName}"` : null;
 
   // --- Render ---
   return (
@@ -2017,6 +2172,7 @@ const App: React.FC = () => {
             onUpdateMediaClipBars={setMediaClipBars}
             onAddClipToTimeline={handleAddClipToTimeline}
             onExportAudio={handleExportAudio}
+            onExportVideoSegment={handleExportVideoSegment}
           />
         </div>
 
@@ -2154,8 +2310,11 @@ const App: React.FC = () => {
             >
               <div className="flex items-center justify-between px-5 py-4 border-b border-stone-800">
                 <div>
-                  <h2 className="text-lg font-semibold text-stone-100">Export Video</h2>
-                  <p className="text-xs text-stone-400 mt-1">Render the timeline with native FFmpeg.</p>
+                  <h2 className="text-lg font-semibold text-stone-100">{exportDialogTitle}</h2>
+                  <p className="text-xs text-stone-400 mt-1">{exportDialogDescription}</p>
+                  {exportTargetLabel && (
+                    <p className="text-xs text-stone-500 mt-1">{exportTargetLabel}</p>
+                  )}
                 </div>
                 <button
                   onClick={closeExportDialog}
@@ -2168,35 +2327,39 @@ const App: React.FC = () => {
               </div>
 
               <div className="p-5 space-y-4">
-                <div>
-                  <label className="block text-xs text-stone-400 mb-2 uppercase">Resolution</label>
-                  <select
-                    value={exportResolution}
-                    onChange={(e) => setExportResolution(e.target.value)}
-                    className="w-full bg-stone-800 border border-stone-700 rounded px-3 py-2 text-sm text-stone-200"
-                    disabled={exporting}
-                  >
-                    <option value="1280x720">720p (1280x720)</option>
-                    <option value="1920x1080">1080p (1920x1080)</option>
-                    <option value="3840x2160">4K (3840x2160)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs text-stone-400 mb-2 uppercase">Video Bitrate (Mbps)</label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={200}
-                    step={1}
-                    value={exportMbps}
-                    onChange={(e) => {
-                      const nextValue = Number(e.target.value);
-                      setExportMbps(Number.isFinite(nextValue) ? nextValue : 8);
-                    }}
-                    className="w-full bg-stone-800 border border-stone-700 rounded px-3 py-2 text-sm text-stone-200"
-                    disabled={exporting}
-                  />
-                </div>
+                {exportMode === 'timeline' && (
+                  <>
+                    <div>
+                      <label className="block text-xs text-stone-400 mb-2 uppercase">Resolution</label>
+                      <select
+                        value={exportResolution}
+                        onChange={(e) => setExportResolution(e.target.value)}
+                        className="w-full bg-stone-800 border border-stone-700 rounded px-3 py-2 text-sm text-stone-200"
+                        disabled={exporting}
+                      >
+                        <option value="1280x720">720p (1280x720)</option>
+                        <option value="1920x1080">1080p (1920x1080)</option>
+                        <option value="3840x2160">4K (3840x2160)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-stone-400 mb-2 uppercase">Video Bitrate (Mbps)</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={200}
+                        step={1}
+                        value={exportMbps}
+                        onChange={(e) => {
+                          const nextValue = Number(e.target.value);
+                          setExportMbps(Number.isFinite(nextValue) ? nextValue : 8);
+                        }}
+                        className="w-full bg-stone-800 border border-stone-700 rounded px-3 py-2 text-sm text-stone-200"
+                        disabled={exporting}
+                      />
+                    </div>
+                  </>
+                )}
 
                 {exportError && (
                   <div className="text-sm text-rose-300 bg-rose-500/10 border border-rose-500/40 rounded px-3 py-2">
@@ -2229,19 +2392,21 @@ const App: React.FC = () => {
                   className="px-4 py-2 rounded border border-stone-700 text-stone-200 hover:bg-stone-800"
                   disabled={exporting}
                 >
-                  Cancel
+                  {exportMode === 'timeline' ? 'Cancel' : 'Close'}
                 </button>
-                <button
-                  onClick={handleExport}
-                  disabled={exporting}
-                  className={`px-5 py-2 rounded font-semibold ${
-                    exporting
-                      ? 'bg-stone-700 text-stone-400 cursor-not-allowed'
-                      : 'bg-blue-600 hover:bg-blue-500 text-white'
-                  }`}
-                >
-                  Export
-                </button>
+                {exportMode === 'timeline' && (
+                  <button
+                    onClick={handleExport}
+                    disabled={exporting}
+                    className={`px-5 py-2 rounded font-semibold ${
+                      exporting
+                        ? 'bg-stone-700 text-stone-400 cursor-not-allowed'
+                        : 'bg-blue-600 hover:bg-blue-500 text-white'
+                    }`}
+                  >
+                    Export
+                  </button>
+                )}
               </div>
             </div>
           </div>

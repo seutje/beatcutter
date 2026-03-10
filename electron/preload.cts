@@ -105,6 +105,8 @@ const api = {
   ffmpeg: {
     run: (request: FfmpegRunRequest) =>
       ipcRenderer.invoke("ffmpeg:run", request) as Promise<FfmpegRunResult>,
+    probeVideoBitrate: (inputPath: string) =>
+      ipcRenderer.invoke("ffmpeg:probeVideoBitrate", inputPath) as Promise<number | null>,
     cancel: (jobId: string) => ipcRenderer.send("ffmpeg:cancel", jobId),
     onProgress: (callback: (progress: FfmpegProgress) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, progress: FfmpegProgress) =>

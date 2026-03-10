@@ -66,6 +66,7 @@ declare global {
       };
       ffmpeg: {
         run: (request: FfmpegRunRequest) => Promise<FfmpegRunResult>;
+        probeVideoBitrate: (inputPath: string) => Promise<number | null>;
         cancel: (jobId: string) => void;
         onProgress: (callback: (progress: FfmpegProgress) => void) => () => void;
       };

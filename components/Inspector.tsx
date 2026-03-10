@@ -25,6 +25,7 @@ interface InspectorProps {
     onUpdateMediaClipBars: (bars: number) => void;
     onAddClipToTimeline: (clipId: string) => void;
     onExportAudio?: () => void;
+    onExportVideoSegment?: (segmentId: string) => void;
 }
 
 const Inspector: React.FC<InspectorProps> = ({
@@ -49,7 +50,8 @@ const Inspector: React.FC<InspectorProps> = ({
     mediaClipBars,
     onUpdateMediaClipBars,
     onAddClipToTimeline,
-    onExportAudio
+    onExportAudio,
+    onExportVideoSegment
 }) => {
     const segment = tracks.flatMap(track => track.segments).find(s => s.id === selectedSegmentId);
     const sourceClip = segment ? clips.find(c => c.id === segment.sourceClipId) : null;
@@ -449,6 +451,21 @@ const Inspector: React.FC<InspectorProps> = ({
                         </div>
                         <p className="text-xs text-stone-500 mt-2 leading-relaxed">
                             Adjusting the slider changes which part of the original video plays during this segment without moving it on the timeline.
+                        </p>
+                    </div>
+                )}
+
+                {sourceClip.type === 'video' && (
+                    <div className="pt-4 border-t border-stone-800">
+                        <button
+                            type="button"
+                            onClick={() => onExportVideoSegment?.(segment.id)}
+                            className="w-full rounded bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-4 shadow-lg transition-colors flex items-center justify-center gap-2"
+                        >
+                            <span>Export Video</span>
+                        </button>
+                        <p className="text-[10px] text-stone-500 mt-2 text-center">
+                            Exports this segment using its current timeline trim, slip, speed, reverse, and fade settings.
                         </p>
                     </div>
                 )}

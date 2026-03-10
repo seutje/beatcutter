@@ -66,6 +66,32 @@ const resolveFfmpegPath = (): string => {
   return candidate;
 };
 
+const resolveFfprobePath = (): string => {
+  const binaryName = process.platform === "win32" ? "ffprobe.exe" : "ffprobe";
+  const envPath = process.env.BEATCUTTER_FFPROBE_PATH;
+  const packagedPath = join(process.resourcesPath, "ffmpeg", binaryName);
+  const devPath = join(app.getAppPath(), "ffmpeg", binaryName);
+  const candidate = envPath ?? (app.isPackaged ? packagedPath : devPath);
+
+  if (!existsSync(candidate)) {
+    throw new Error(
+      `FFprobe binary not found at ${candidate}. Place it under resources/ffmpeg or set BEATCUTTER_FFPROBE_PATH.`,
+    );
+  }
+
+  if (process.platform !== "win32") {
+    try {
+      chmodSync(candidate, 0o755);
+    } catch (error) {
+      throw new Error(
+        `FFprobe binary is not executable at ${candidate}. Run chmod +x or set BEATCUTTER_FFPROBE_PATH to an executable binary.`,
+      );
+    }
+  }
+
+  return candidate;
+};
+
 const parseTimeToSeconds = (line: string): number | null => {
   const match = /time=(\d+):(\d+):(\d+(?:\.\d+)?)/.exec(line);
   if (!match) return null;
@@ -222,9 +248,72 @@ const cancelJob = (jobId: string) => {
   job.child.kill("SIGTERM");
 };
 
+const probeVideoBitrate = async (inputPath: string): Promise<number | null> => {
+  const ffprobePath = resolveFfprobePath();
+  const runProbe = (args: string[]) =>
+    new Promise<string>((resolve, reject) => {
+      const child = spawn(ffprobePath, args, { windowsHide: true });
+      let stdout = "";
+      let stderr = "";
+
+      child.stdout.on("data", (chunk) => {
+        stdout += chunk.toString();
+      });
+      child.stderr.on("data", (chunk) => {
+        stderr += chunk.toString();
+      });
+      child.once("error", reject);
+      child.once("close", (exitCode) => {
+        if (exitCode !== 0) {
+          reject(new Error(stderr.trim() || `ffprobe failed with exit code ${exitCode ?? "unknown"}.`));
+          return;
+        }
+        resolve(stdout.trim());
+      });
+    });
+
+  const parseBitrate = (value: string) => {
+    const bitrate = Number(value.trim());
+    return Number.isFinite(bitrate) && bitrate > 0 ? bitrate : null;
+  };
+
+  const streamBitrate = parseBitrate(
+    await runProbe([
+      "-v",
+      "error",
+      "-select_streams",
+      "v:0",
+      "-show_entries",
+      "stream=bit_rate",
+      "-of",
+      "default=nokey=1:noprint_wrappers=1",
+      inputPath,
+    ]).catch(() => ""),
+  );
+  if (streamBitrate) {
+    return streamBitrate;
+  }
+
+  const formatBitrate = parseBitrate(
+    await runProbe([
+      "-v",
+      "error",
+      "-show_entries",
+      "format=bit_rate",
+      "-of",
+      "default=nokey=1:noprint_wrappers=1",
+      inputPath,
+    ]).catch(() => ""),
+  );
+  return formatBitrate;
+};
+
 export const registerFfmpegIpc = () => {
   ipcMain.handle("ffmpeg:run", async (event, request: FfmpegRunRequest) =>
     startFfmpeg(event.sender, request, "ffmpeg:progress"),
+  );
+  ipcMain.handle("ffmpeg:probeVideoBitrate", async (_event, inputPath: string) =>
+    probeVideoBitrate(inputPath),
   );
 
   ipcMain.on("ffmpeg:cancel", (_event, jobId: string) => {

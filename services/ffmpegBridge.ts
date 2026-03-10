@@ -28,6 +28,8 @@ const getApi = () => {
 
 export const runFfmpeg = (request: FfmpegRunRequest) => getApi().ffmpeg.run(request);
 
+export const probeVideoBitrate = (inputPath: string) => getApi().ffmpeg.probeVideoBitrate(inputPath);
+
 export const cancelFfmpeg = (jobId: string) => getApi().ffmpeg.cancel(jobId);
 
 export const onFfmpegProgress = (callback: (progress: FfmpegProgress) => void) =>
